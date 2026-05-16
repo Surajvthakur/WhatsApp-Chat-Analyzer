@@ -1,0 +1,315 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import {
+  getActivityHeatmap,
+  getBusyUsers,
+  getCommonWords,
+  getDailyTimeline,
+  getEmoji,
+  getMonthActivity,
+  getMonthlyTimeline,
+  getUsers,
+  getWeekActivity,
+  getWordCloudUrl,
+} from "@/lib/api";
+import { monthLabel } from "@/lib/utils";
+import { StatCards } from "@/components/dashboard/stat-cards";
+import { ChartShell } from "@/components/charts/chart-shell";
+import { TimelineChart } from "@/components/charts/timeline-chart";
+import { BarChartCard } from "@/components/charts/bar-chart-card";
+import { HeatmapGrid } from "@/components/charts/heatmap-grid";
+import { EmojiPieChart } from "@/components/charts/emoji-pie-chart";
+import { Select } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+interface DashboardViewProps {
+  chatId: string;
+  selectedUser: string;
+  onUserChange: (user: string) => void;
+}
+
+export function DashboardView({
+  chatId,
+  selectedUser,
+  onUserChange,
+}: DashboardViewProps) {
+  const { data: users = [] } = useQuery({
+    queryKey: ["users", chatId],
+    queryFn: () => getUsers(chatId),
+  });
+
+  const monthly = useQuery({
+    queryKey: ["monthly", chatId, selectedUser],
+    queryFn: () => getMonthlyTimeline(chatId, selectedUser),
+  });
+
+  const daily = useQuery({
+    queryKey: ["daily", chatId, selectedUser],
+    queryFn: () => getDailyTimeline(chatId, selectedUser),
+  });
+
+  const weekActivity = useQuery({
+    queryKey: ["week", chatId, selectedUser],
+    queryFn: () => getWeekActivity(chatId, selectedUser),
+  });
+
+  const monthActivity = useQuery({
+    queryKey: ["month-activity", chatId, selectedUser],
+    queryFn: () => getMonthActivity(chatId, selectedUser),
+  });
+
+  const heatmap = useQuery({
+    queryKey: ["heatmap", chatId, selectedUser],
+    queryFn: () => getActivityHeatmap(chatId, selectedUser),
+  });
+
+  const busyUsers = useQuery({
+    queryKey: ["busy-users", chatId],
+    queryFn: () => getBusyUsers(chatId),
+    enabled: selectedUser === "Overall",
+  });
+
+  const commonWords = useQuery({
+    queryKey: ["words", chatId, selectedUser],
+    queryFn: () => getCommonWords(chatId, selectedUser),
+  });
+
+  const emoji = useQuery({
+    queryKey: ["emoji", chatId, selectedUser],
+    queryFn: () => getEmoji(chatId, selectedUser),
+  });
+
+  const wordCloudUrl = getWordCloudUrl(chatId, selectedUser);
+
+  const monthlyData =
+    monthly.data?.map((d) => ({ label: d.time, value: d.message })) ?? [];
+  const dailyData =
+    daily.data?.map((d) => ({
+      label: d.only_date.slice(0, 10),
+      value: d.message,
+    })) ?? [];
+  const weekData =
+    weekActivity.data?.map((d) => ({ label: d.label, count: d.count })) ?? [];
+  const monthData =
+    monthActivity.data?.map((d) => ({
+      label: monthLabel(d.label),
+      count: d.count,
+    })) ?? [];
+  const wordsData =
+    commonWords.data?.map((d) => ({ label: d.word, count: d.count })) ?? [];
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Chat Analytics</h1>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Insights for {selectedUser === "Overall" ? "everyone" : selectedUser}
+          </p>
+        </div>
+        <div className="w-full sm:w-64">
+          <label htmlFor="user-select" className="mb-1 block text-xs font-medium">
+            Show analysis for
+          </label>
+          <Select
+            id="user-select"
+            value={selectedUser}
+            onChange={(e) => onUserChange(e.target.value)}
+          >
+            {users.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+
+      <section>
+        <h2 className="mb-4 text-lg font-semibold">Top Statistics</h2>
+        <StatCards chatId={chatId} user={selectedUser} />
+      </section>
+
+      <ChartShell
+        title="Monthly Timeline"
+        description="Message volume over months"
+        isLoading={monthly.isLoading}
+        isEmpty={!monthly.isLoading && monthlyData.length === 0}
+      >
+        <TimelineChart data={monthlyData} color="#25D366" xLabel="Month" />
+      </ChartShell>
+
+      <ChartShell
+        title="Daily Timeline"
+        description="Message volume per day"
+        isLoading={daily.isLoading}
+        isEmpty={!daily.isLoading && dailyData.length === 0}
+      >
+        <TimelineChart data={dailyData} color="#128C7E" xLabel="Date" />
+      </ChartShell>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ChartShell
+          title="Most Busy Day"
+          isLoading={weekActivity.isLoading}
+          isEmpty={!weekActivity.isLoading && weekData.length === 0}
+        >
+          <BarChartCard data={weekData} color="#6C5CE7" />
+        </ChartShell>
+        <ChartShell
+          title="Most Busy Month"
+          isLoading={monthActivity.isLoading}
+          isEmpty={!monthActivity.isLoading && monthData.length === 0}
+        >
+          <BarChartCard data={monthData} color="#FF6B6B" />
+        </ChartShell>
+      </div>
+
+      <ChartShell
+        title="Weekly Activity Map"
+        description="Messages by day and hour period"
+        isLoading={heatmap.isLoading}
+        isEmpty={
+          !heatmap.isLoading &&
+          (!heatmap.data || heatmap.data.days.length === 0)
+        }
+        className="col-span-full"
+      >
+        {heatmap.data && <HeatmapGrid data={heatmap.data} />}
+      </ChartShell>
+
+      {selectedUser === "Overall" && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <ChartShell
+            title="Most Busy Users"
+            isLoading={busyUsers.isLoading}
+            isEmpty={
+              !busyUsers.isLoading &&
+              (!busyUsers.data || busyUsers.data.top_users.length === 0)
+            }
+          >
+            <BarChartCard
+              data={
+                busyUsers.data?.top_users.map((u) => ({
+                  label: u.user,
+                  count: u.count,
+                })) ?? []
+              }
+              color="#25D366"
+              layout="horizontal"
+            />
+          </ChartShell>
+          <Card>
+            <CardHeader>
+              <CardTitle>User Share (%)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {busyUsers.isLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="h-8 animate-pulse rounded bg-[var(--muted)]" />
+                  ))}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[var(--border)] text-left">
+                        <th className="pb-2 font-medium">User</th>
+                        <th className="pb-2 font-medium">%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {busyUsers.data?.percentages.map((row) => (
+                        <tr
+                          key={row.name}
+                          className="border-b border-[var(--border)]/50"
+                        >
+                          <td className="py-2">{row.name}</td>
+                          <td className="py-2 tabular-nums">{row.percent}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Word Cloud</CardTitle>
+        </CardHeader>
+        <CardContent className="flex justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={wordCloudUrl}
+            alt="Word cloud"
+            width={500}
+            height={500}
+            className="rounded-lg border border-[var(--border)]"
+          />
+        </CardContent>
+      </Card>
+
+      <ChartShell
+        title="Most Common Words"
+        isLoading={commonWords.isLoading}
+        isEmpty={!commonWords.isLoading && wordsData.length === 0}
+      >
+        <BarChartCard data={wordsData} color="#128C7E" layout="horizontal" />
+      </ChartShell>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Emoji Analysis</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {emoji.isLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-6 animate-pulse rounded bg-[var(--muted)]" />
+                ))}
+              </div>
+            ) : emoji.data && emoji.data.length > 0 ? (
+              <div className="max-h-[320px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--border)] text-left">
+                      <th className="pb-2">Emoji</th>
+                      <th className="pb-2">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {emoji.data.map((row) => (
+                      <tr
+                        key={row.emoji}
+                        className="border-b border-[var(--border)]/50"
+                      >
+                        <td className="py-2 text-xl">{row.emoji}</td>
+                        <td className="py-2 tabular-nums">{row.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--muted-foreground)]">No emojis found</p>
+            )}
+          </CardContent>
+        </Card>
+        <ChartShell
+          title="Emoji Distribution"
+          isLoading={emoji.isLoading}
+          isEmpty={!emoji.isLoading && (!emoji.data || emoji.data.length === 0)}
+        >
+          {emoji.data && <EmojiPieChart data={emoji.data} />}
+        </ChartShell>
+      </div>
+    </div>
+  );
+}
