@@ -1,14 +1,14 @@
 # WhatsApp Chat Analyzer
 
-A production-style monorepo that analyzes exported WhatsApp `.txt` chats with a **Next.js** dashboard and a **FastAPI** API. Core parsing and analytics logic lives in unchanged `preprocessor.py` and `helper.py`.
+A production-style monorepo that analyzes exported WhatsApp `.txt` chats with a **Next.js** dashboard and a **FastAPI** API. Core parsing and analytics logic lives in `backend/preprocessor.py` and `backend/helper.py`.
 
 ## Architecture
 
 ```
 WhatsApp-Chat-Analyzer/
-├── backend/          # FastAPI + original Python analytics
+├── backend/          # FastAPI + Python analytics (preprocessor, helper)
 ├── frontend/         # Next.js 15 + Recharts dashboard
-└── app.py            # Legacy Streamlit app (not used in production)
+└── docker-compose.yml
 ```
 
 - **Backend:** Parses uploads once, caches sessions in memory (1 hour TTL), exposes JSON/chart data endpoints.
@@ -115,11 +115,3 @@ Chat files are parsed in memory and stored in a temporary server session. Sessio
 - Word cloud and common words (Hinglish/English stopwords)
 - Emoji table and distribution chart
 
-## Legacy Streamlit app
-
-The original UI is still available at the repo root:
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
