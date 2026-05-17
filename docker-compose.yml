@@ -6,10 +6,8 @@ services:
     container_name: whatsapp-analyzer-api
     ports:
       - "8000:8000"
-    environment:
-      CORS_ORIGINS: http://localhost:3000
-      SESSION_TTL_SECONDS: 3600
-      MAX_UPLOAD_MB: 50
+    env_file:
+      - ./backend/.env
     healthcheck:
       test:
         [

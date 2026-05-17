@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   getActivityHeatmap,
@@ -22,6 +23,9 @@ import { HeatmapGrid } from "@/components/charts/heatmap-grid";
 import { EmojiPieChart } from "@/components/charts/emoji-pie-chart";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Bot } from "lucide-react";
+import { AskAIModal } from "./ask-ai-modal";
 
 interface DashboardViewProps {
   chatId: string;
@@ -34,6 +38,8 @@ export function DashboardView({
   selectedUser,
   onUserChange,
 }: DashboardViewProps) {
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+
   const { data: users = [] } = useQuery({
     queryKey: ["users", chatId],
     queryFn: () => getUsers(chatId),
@@ -108,23 +114,38 @@ export function DashboardView({
             Insights for {selectedUser === "Overall" ? "everyone" : selectedUser}
           </p>
         </div>
-        <div className="w-full sm:w-64">
-          <label htmlFor="user-select" className="mb-1 block text-xs font-medium">
-            Show analysis for
-          </label>
-          <Select
-            id="user-select"
-            value={selectedUser}
-            onChange={(e) => onUserChange(e.target.value)}
+        <div className="flex w-full flex-col sm:w-auto sm:flex-row sm:items-end gap-4">
+          <div className="w-full sm:w-64">
+            <label htmlFor="user-select" className="mb-1 block text-xs font-medium">
+              Show analysis for
+            </label>
+            <Select
+              id="user-select"
+              value={selectedUser}
+              onChange={(e) => onUserChange(e.target.value)}
+            >
+              {users.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <Button
+            onClick={() => setIsAIModalOpen(true)}
+            className="flex items-center gap-2 w-full sm:w-auto"
           >
-            {users.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </Select>
+            <Bot className="h-4 w-4" />
+            Ask AI
+          </Button>
         </div>
       </div>
+
+      <AskAIModal
+        chatId={chatId}
+        isOpen={isAIModalOpen}
+        onClose={() => setIsAIModalOpen(false)}
+      />
 
       <section>
         <h2 className="mb-4 text-lg font-semibold">Top Statistics</h2>
