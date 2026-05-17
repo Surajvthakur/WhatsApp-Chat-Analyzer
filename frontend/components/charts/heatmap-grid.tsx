@@ -24,7 +24,7 @@ export function HeatmapGrid({ data }: HeatmapGridProps) {
   const rows = [...orderedDays, ...extraDays];
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto pb-2">
       <table className="w-full min-w-[600px] border-collapse text-xs">
         <thead>
           <tr>

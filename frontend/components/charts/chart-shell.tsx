@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 interface ChartShellProps {
   title: string;
@@ -11,6 +12,8 @@ interface ChartShellProps {
   emptyMessage?: string;
   children: React.ReactNode;
   className?: string;
+  /** Override the default fixed chart height (e.g. `h-auto` for tall tables). */
+  contentClassName?: string;
 }
 
 export function ChartShell({
@@ -21,6 +24,7 @@ export function ChartShell({
   emptyMessage = "No data available",
   children,
   className,
+  contentClassName,
 }: ChartShellProps) {
   return (
     <Card className={className}>
@@ -36,7 +40,9 @@ export function ChartShell({
             {emptyMessage}
           </div>
         ) : (
-          <div className="h-[280px] w-full">{children}</div>
+          <div className={cn("h-[280px] w-full", contentClassName)}>
+            {children}
+          </div>
         )}
       </CardContent>
     </Card>

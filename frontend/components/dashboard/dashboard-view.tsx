@@ -175,6 +175,7 @@ export function DashboardView({
           (!heatmap.data || heatmap.data.days.length === 0)
         }
         className="col-span-full"
+        contentClassName="h-auto"
       >
         {heatmap.data && <HeatmapGrid data={heatmap.data} />}
       </ChartShell>
