@@ -239,18 +239,24 @@ export function DashboardView({
         </div>
       )}
 
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle>Word Cloud</CardTitle>
         </CardHeader>
-        <CardContent className="flex justify-center">
+        <CardContent className="relative flex min-h-[300px] items-center justify-center overflow-hidden bg-gradient-to-br from-[#075E54]/12 via-[var(--muted)]/50 to-[#25D366]/12 px-4 py-8 sm:px-8">
+          <div
+            className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#25D366]/10 blur-3xl"
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute -bottom-12 -left-12 h-40 w-40 rounded-full bg-[#128C7E]/15 blur-3xl"
+            aria-hidden
+          />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={wordCloudUrl}
-            alt="Word cloud"
-            width={500}
-            height={500}
-            className="rounded-lg border border-[var(--border)]"
+            alt="Word cloud of most-used words in this chat"
+            className="relative z-10 max-h-[min(560px,70vh)] w-full max-w-4xl object-contain drop-shadow-[0_8px_32px_rgba(37,211,102,0.15)]"
           />
         </CardContent>
       </Card>

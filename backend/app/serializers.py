@@ -2,7 +2,6 @@ import io
 from datetime import date, datetime
 
 import pandas as pd
-from PIL import Image
 
 from app.schemas import (
     BusyUserItem,
@@ -108,8 +107,7 @@ def emoji_to_json(df: pd.DataFrame) -> list[EmojiCount]:
 
 
 def wordcloud_to_png(wordcloud) -> bytes:
-    array = wordcloud.to_array()
-    image = Image.fromarray(array)
+    image = wordcloud.to_image()
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     return buffer.getvalue()

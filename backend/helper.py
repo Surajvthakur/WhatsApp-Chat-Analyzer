@@ -1,9 +1,46 @@
-from urlextract import URLExtract
-from wordcloud import WordCloud
+from pathlib import Path
+
+import emoji
 import pandas as pd
 from collections import Counter
+from urlextract import URLExtract
+from wordcloud import WordCloud
+
 extract = URLExtract()
-import emoji
+_BACKEND_DIR = Path(__file__).resolve().parent
+
+_WHATSAPP_SKIP_MESSAGES = {
+    "<media omitted>",
+    "image omitted",
+    "video omitted",
+    "audio omitted",
+    "sticker omitted",
+    "gif omitted",
+    "document omitted",
+    "this message was deleted",
+    "you deleted this message",
+    "message deleted",
+}
+
+_WHATSAPP_NOISE_WORDS = {
+    "media",
+    "omitted",
+    "http",
+    "https",
+}
+
+_WORDCLOUD_COLORS = [
+    "#25D366",
+    "#128C7E",
+    "#075E54",
+    "#00A884",
+    "#34B7F1",
+    "#53BDEB",
+    "#D9FDD3",
+    "#8696A0",
+]
+
+_stop_words_cache: set[str] | None = None
 
 def fetch_stats(selected_user,df):
 
@@ -39,17 +76,70 @@ def most_busy_users(df):
     return x, percent_df
 
 
-from wordcloud import WordCloud
+def _load_stop_words() -> set[str]:
+    global _stop_words_cache
+    if _stop_words_cache is not None:
+        return _stop_words_cache
+
+    path = _BACKEND_DIR / "stop_hinglish.txt"
+    with open(path, encoding="utf-8") as f:
+        _stop_words_cache = {
+            line.strip().lower()
+            for line in f
+            if line.strip() and not line.strip().startswith("#")
+        }
+    _stop_words_cache.update(_WHATSAPP_NOISE_WORDS)
+    return _stop_words_cache
+
+
+def _wordcloud_color(word, font_size, position, orientation, random_state=None, **kwargs):
+    return random_state.choice(_WORDCLOUD_COLORS)
+
+
+def _build_word_frequencies(selected_user: str, df: pd.DataFrame) -> Counter:
+    if selected_user != "Overall":
+        df = df[df["user"] == selected_user]
+
+    stop_words = _load_stop_words()
+    words: list[str] = []
+
+    for message in df["message"].astype(str):
+        msg = message.strip().lower()
+        if not msg or msg in _WHATSAPP_SKIP_MESSAGES:
+            continue
+        if msg.startswith("http") or msg.startswith("https://"):
+            continue
+
+        for raw in msg.split():
+            word = "".join(ch for ch in raw if ch.isalnum() or ch in "'")
+            if len(word) < 2 or word in stop_words:
+                continue
+            words.append(word)
+
+    return Counter(words)
+
+
 def create_wordcloud(selected_user, df):
-    if selected_user != 'Overall':
-        df = df[df['user'] == selected_user]
+    frequencies = _build_word_frequencies(selected_user, df)
+    if not frequencies:
+        frequencies = Counter({"chat": 1})
 
-    # Concatenate all messages into a single string
-    text = " ".join(df['message'].astype(str))
-
-    wc = WordCloud(width=500, height=500, min_font_size=10, background_color='white')
-    df_wc = wc.generate(text)
-    return df_wc
+    wc = WordCloud(
+        width=900,
+        height=500,
+        background_color=None,
+        mode="RGBA",
+        max_words=150,
+        min_font_size=14,
+        max_font_size=96,
+        relative_scaling=0.55,
+        prefer_horizontal=0.8,
+        collocations=False,
+        color_func=_wordcloud_color,
+        random_state=42,
+        margin=4,
+    )
+    return wc.generate_from_frequencies(dict(frequencies))
 
 
 def most_common_words(selected_user, df):

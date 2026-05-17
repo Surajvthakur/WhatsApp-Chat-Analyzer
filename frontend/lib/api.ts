@@ -172,6 +172,13 @@ export function getEmoji(chatId: string, user: string) {
   );
 }
 
+/** Bump when word-cloud rendering changes so browsers refetch the PNG. */
+const WORDCLOUD_CACHE_VERSION = "3";
+
 export function getWordCloudUrl(chatId: string, user: string): string {
-  return `${API_BASE}/api/v1/chats/${chatId}/words/cloud?user=${encodeURIComponent(user)}`;
+  const params = new URLSearchParams({
+    user,
+    v: WORDCLOUD_CACHE_VERSION,
+  });
+  return `${API_BASE}/api/v1/chats/${chatId}/words/cloud?${params.toString()}`;
 }
