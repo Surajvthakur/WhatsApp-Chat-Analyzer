@@ -25,12 +25,6 @@ export async function SiteHeader() {
               <span className="text-xs text-[var(--muted-foreground)] border-r border-[var(--border)] pr-3 py-1 hidden md:inline-block">
                 {session.user?.email}
               </span>
-              <Link
-                href="/login"
-                className="rounded-lg bg-[var(--primary)] px-3.5 py-1.5 text-xs sm:text-sm font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 cursor-pointer"
-              >
-                Login / Register
-              </Link>
               <form
                 action={async () => {
                   "use server";
