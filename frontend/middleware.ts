@@ -12,7 +12,7 @@ export default auth((req) => {
                            pathname.startsWith('/profile');
                            
   if (isProtectedRoute && !isLoggedIn) {
-    const newUrl = new URL("/api/auth/signin", req.nextUrl.origin);
+    const newUrl = new URL("/login", req.nextUrl.origin);
     return Response.redirect(newUrl);
   }
 })

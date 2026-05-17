@@ -7,5 +7,8 @@ export const authConfig = {
       from: "onboarding@resend.dev"
     })
   ],
+  pages: {
+    signIn: "/login",
+  },
   session: { strategy: "jwt" }
 } satisfies NextAuthConfig
