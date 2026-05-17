@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import analysis
+from app.routers import ai_chat
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 os.chdir(BACKEND_ROOT)
@@ -36,6 +37,7 @@ app.add_middleware(
 )
 
 app.include_router(analysis.router)
+app.include_router(ai_chat.router)
 
 
 @app.get("/health")
