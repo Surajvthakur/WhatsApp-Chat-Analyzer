@@ -10,8 +10,12 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Generate Prisma Client
+RUN npx prisma generate
+
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy
 
 RUN npm run build
 

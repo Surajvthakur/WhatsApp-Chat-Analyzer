@@ -32,7 +32,25 @@ services:
     container_name: whatsapp-analyzer-web
     ports:
       - "3000:3000"
+    env_file:
+      - ./frontend/.env
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: whatsapp-analyzer-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: whatsapp_ai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
