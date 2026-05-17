@@ -11,5 +11,19 @@ export const authConfig = {
     signIn: "/login",
   },
   session: { strategy: "jwt" },
-  trustHost: true
+  trustHost: true,
+  callbacks: {
+    jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
+    },
+    session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string;
+      }
+      return session;
+    },
+  },
 } satisfies NextAuthConfig

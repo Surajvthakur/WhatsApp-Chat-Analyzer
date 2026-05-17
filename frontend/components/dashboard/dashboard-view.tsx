@@ -13,6 +13,7 @@ import {
   getUsers,
   getWeekActivity,
   getWordCloudUrl,
+  saveWorkspace,
 } from "@/lib/api";
 import { monthLabel } from "@/lib/utils";
 import { StatCards } from "@/components/dashboard/stat-cards";
@@ -24,8 +25,9 @@ import { EmojiPieChart } from "@/components/charts/emoji-pie-chart";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Bot } from "lucide-react";
+import { Bot, Save, Loader2 } from "lucide-react";
 import { AskAIModal } from "./ask-ai-modal";
+import { useSession } from "next-auth/react";
 
 interface DashboardViewProps {
   chatId: string;
@@ -38,7 +40,13 @@ export function DashboardView({
   selectedUser,
   onUserChange,
 }: DashboardViewProps) {
+  const { data: session } = useSession();
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState("WhatsApp Chat Analysis");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const { data: users = [] } = useQuery({
     queryKey: ["users", chatId],
@@ -131,13 +139,36 @@ export function DashboardView({
               ))}
             </Select>
           </div>
-          <Button
-            onClick={() => setIsAIModalOpen(true)}
-            className="flex items-center gap-2 w-full sm:w-auto"
-          >
-            <Bot className="h-4 w-4" />
-            Ask AI
-          </Button>
+          <div className="flex w-full flex-col sm:w-auto sm:flex-row gap-2">
+            {session ? (
+              <Button
+                onClick={() => setIsSaveModalOpen(true)}
+                variant="outline"
+                className="flex items-center gap-2 border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary)]/10 w-full sm:w-auto"
+              >
+                <Save className="h-4 w-4" />
+                Save Workspace
+              </Button>
+            ) : (
+              <Button
+                onClick={() => {
+                  window.location.href = `/login?callbackUrl=/dashboard/${chatId}`;
+                }}
+                variant="outline"
+                className="flex items-center gap-2 border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] w-full sm:w-auto"
+              >
+                <Save className="h-4 w-4" />
+                Save Workspace (Login)
+              </Button>
+            )}
+            <Button
+              onClick={() => setIsAIModalOpen(true)}
+              className="flex items-center gap-2 w-full sm:w-auto"
+            >
+              <Bot className="h-4 w-4" />
+              Ask AI
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -146,6 +177,94 @@ export function DashboardView({
         isOpen={isAIModalOpen}
         onClose={() => setIsAIModalOpen(false)}
       />
+
+      {isSaveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-[var(--foreground)]">Save Workspace</h3>
+            <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+              This will save your chat data, statistics, and vector embeddings so you can return to them instantly later without re-uploading.
+            </p>
+            
+            <div className="mt-4">
+              <label htmlFor="workspace-name-input" className="block text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-2">
+                Workspace Name
+              </label>
+              <input
+                id="workspace-name-input"
+                type="text"
+                value={workspaceName}
+                onChange={(e) => setWorkspaceName(e.target.value)}
+                className="w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--primary)] transition-colors"
+                placeholder="e.g. Chat with Rahul"
+                disabled={isSaving || saveSuccess}
+              />
+            </div>
+            
+            {saveError && (
+              <p className="mt-3 text-sm text-red-500 font-medium">
+                {saveError}
+              </p>
+            )}
+            
+            {saveSuccess && (
+              <p className="mt-3 text-sm text-[var(--primary)] font-medium">
+                ✓ Workspace saved successfully! Redirecting...
+              </p>
+            )}
+            
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsSaveModalOpen(false);
+                  setSaveError(null);
+                }}
+                disabled={isSaving || saveSuccess}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (!workspaceName.trim()) {
+                    setSaveError("Workspace name cannot be empty.");
+                    return;
+                  }
+                  setIsSaving(true);
+                  setSaveError(null);
+                  try {
+                    await saveWorkspace(chatId, workspaceName);
+                    setSaveSuccess(true);
+                    setTimeout(() => {
+                      setIsSaveModalOpen(false);
+                      setSaveSuccess(false);
+                      window.location.href = "/analyze";
+                    }, 1500);
+                  } catch (err: any) {
+                    setSaveError(err.message || "Failed to save workspace.");
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }}
+                disabled={isSaving || saveSuccess}
+                className="flex items-center gap-2"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section>
         <h2 className="mb-4 text-lg font-semibold">Top Statistics</h2>

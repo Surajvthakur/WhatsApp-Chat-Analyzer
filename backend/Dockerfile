@@ -6,7 +6,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 COPY requirements-api.txt .
-RUN pip install --no-cache-dir -r requirements-api.txt
+RUN pip install --no-cache-dir --timeout 100 --retries 10 torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir --timeout 100 --retries 10 -r requirements-api.txt
 
 COPY preprocessor.py helper.py stop_hinglish.txt ./
 COPY app ./app

@@ -18,6 +18,8 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  workspaces Workspace[]
 }
 
 model Account {
@@ -72,4 +74,17 @@ model Authenticator {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, credentialID])
+}
+
+model Workspace {
+  id            String   @id @default(cuid())
+  userId        String
+  workspaceName String
+  createdAt     DateTime @default(now())
+  summary       String?  @db.Text
+  chatData      String   @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

@@ -28,9 +28,13 @@ def ingest_chat(session_id: str, df: pd.DataFrame):
     embeddings = generate_embeddings(chunks)
     index = create_faiss_index(embeddings)
     
+    # Safely convert embeddings (numpy array) to list of floats for persistence later
+    embeddings_list = [e.tolist() for e in embeddings] if hasattr(embeddings, "tolist") else list(embeddings)
+    
     active_sessions[session_id] = {
         "index": index,
         "chunks": chunks,
+        "embeddings": embeddings_list,
         "last_accessed": time.time()
     }
     
@@ -39,28 +43,35 @@ def ingest_chat(session_id: str, df: pd.DataFrame):
 
 def query_chat(session_id: str, question: str) -> str:
     """
-    Retrieves context using FAISS and generates an answer using Groq.
+    Retrieves context using FAISS (RAM) or Qdrant (persistent) and generates an answer using Groq.
     """
     session = active_sessions.get(session_id)
-    if not session:
-        return "Session expired or not initialized. Please try asking again or refresh the chat analysis."
-        
-    # Update last accessed time
-    session["last_accessed"] = time.time()
-    
-    index = session["index"]
-    chunks = session["chunks"]
     
     # 1. Embed the question
     question_embedding = generate_embeddings([question])[0]
+    if hasattr(question_embedding, "tolist"):
+        question_embedding = question_embedding.tolist()
     
-    # 2. Retrieve top chunks
-    top_indices = search_faiss_index(index, question_embedding, top_k=5)
+    retrieved_chunks = []
     
-    if not top_indices:
+    if session:
+        # Update last accessed time
+        session["last_accessed"] = time.time()
+        
+        index = session["index"]
+        chunks = session["chunks"]
+        
+        # Retrieve top chunks using FAISS
+        top_indices = search_faiss_index(index, question_embedding, top_k=5)
+        retrieved_chunks = [chunks[i] for i in top_indices if i >= 0 and i < len(chunks)]
+    else:
+        # Fall back to Qdrant search if not in RAM
+        from app.ai.qdrant_store import search_qdrant_embeddings
+        retrieved_chunks = search_qdrant_embeddings(session_id, question_embedding, top_k=5)
+        
+    if not retrieved_chunks:
         return "Could not find relevant information in the chat."
         
-    retrieved_chunks = [chunks[i] for i in top_indices if i >= 0 and i < len(chunks)]
     context = "\n\n".join(retrieved_chunks)
     
     # 3. Ask Groq

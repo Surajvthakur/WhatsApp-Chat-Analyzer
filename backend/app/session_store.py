@@ -10,6 +10,7 @@ class ChatSession:
     chat_id: str
     df: pd.DataFrame
     created_at: float
+    raw_text: str = ""
 
 
 class SessionStore:
@@ -17,13 +18,14 @@ class SessionStore:
         self._sessions: dict[str, ChatSession] = {}
         self._ttl_seconds = ttl_seconds
 
-    def create(self, df: pd.DataFrame) -> str:
+    def create(self, df: pd.DataFrame, raw_text: str = "") -> str:
         self._cleanup_expired()
         chat_id = str(uuid.uuid4())
         self._sessions[chat_id] = ChatSession(
             chat_id=chat_id,
             df=df,
             created_at=time.time(),
+            raw_text=raw_text,
         )
         return chat_id
 
@@ -33,6 +35,10 @@ class SessionStore:
         if session is None:
             return None
         return session.df
+
+    def get_session(self, chat_id: str) -> ChatSession | None:
+        self._cleanup_expired()
+        return self._sessions.get(chat_id)
 
     def _cleanup_expired(self) -> None:
         now = time.time()
