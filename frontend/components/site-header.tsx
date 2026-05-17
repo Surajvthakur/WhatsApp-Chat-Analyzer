@@ -21,10 +21,16 @@ export async function SiteHeader() {
           </Link>
 
           {session ? (
-            <div className="flex items-center gap-4">
-              <span className="text-xs text-[var(--muted-foreground)] border-r border-[var(--border)] pr-4 py-1 hidden sm:inline-block">
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-[var(--muted-foreground)] border-r border-[var(--border)] pr-3 py-1 hidden md:inline-block">
                 {session.user?.email}
               </span>
+              <Link
+                href="/login"
+                className="rounded-lg bg-[var(--primary)] px-3.5 py-1.5 text-xs sm:text-sm font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 cursor-pointer"
+              >
+                Login / Register
+              </Link>
               <form
                 action={async () => {
                   "use server";
@@ -33,7 +39,7 @@ export async function SiteHeader() {
               >
                 <button
                   type="submit"
-                  className="rounded-lg border border-[var(--border)] px-4 py-1.5 font-medium hover:bg-[var(--muted)] transition-colors cursor-pointer"
+                  className="rounded-lg border border-[var(--border)] px-3.5 py-1.5 text-xs sm:text-sm font-medium hover:bg-[var(--muted)] transition-colors cursor-pointer"
                 >
                   Sign Out
                 </button>
@@ -44,7 +50,7 @@ export async function SiteHeader() {
               href="/login"
               className="rounded-lg bg-[var(--primary)] px-4 py-1.5 font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 cursor-pointer"
             >
-              Sign In
+              Login / Register
             </Link>
           )}
         </nav>
