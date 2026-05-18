@@ -77,14 +77,28 @@ model Authenticator {
 }
 
 model Workspace {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   userId        String
   workspaceName String
-  createdAt     DateTime @default(now())
-  summary       String?  @db.Text
-  chatData      String   @db.Text
+  createdAt     DateTime  @default(now())
+  summary       String?   @db.Text
+  chatData      String    @db.Text
+  messages      Message[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
+
+model Message {
+  id          String   @id @default(cuid())
+  workspaceId String
+  role        String   // "user" or "assistant"
+  content     String   @db.Text
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+

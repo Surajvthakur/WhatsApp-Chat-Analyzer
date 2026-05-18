@@ -5,6 +5,11 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { 
+  getChatHistory, 
+  addChatMessage, 
+  ChatMessage 
+} from "@/lib/api";
+import { 
   Send, 
   Bot, 
   User, 
@@ -12,25 +17,22 @@ import {
   Sparkles, 
   MessageSquare, 
   FileText,
-  Clock
+  Clock,
+  Info
 } from "lucide-react";
 
 interface ChatPageProps {
   params: Promise<{ chatId: string }>;
 }
 
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
-
 export default function ChatPage({ params }: ChatPageProps) {
   const { chatId } = use(params);
   const [isInitializing, setIsInitializing] = useState(true);
   const [initError, setInitError] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSavedWorkspace, setIsSavedWorkspace] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -50,6 +52,7 @@ export default function ChatPage({ params }: ChatPageProps) {
       setIsInitializing(true);
       setInitError("");
       try {
+        // 1. Initialize FastAPI RAM session
         const res = await fetch(`${baseUrl}/api/v1/ai/${chatId}/init`, {
           method: "POST",
         });
@@ -57,13 +60,33 @@ export default function ChatPage({ params }: ChatPageProps) {
           throw new Error("Failed to initialize AI session");
         }
         
-        if (active && messages.length === 0) {
-          setMessages([
-            {
-              role: "assistant",
-              content: "Hi! I've loaded your WhatsApp chat into my memory. Ask me anything about it!",
-            },
-          ]);
+        // 2. Fetch persistent message history from database
+        try {
+          const dbMessages = await getChatHistory(chatId);
+          if (active) {
+            setIsSavedWorkspace(true);
+            if (dbMessages.length > 0) {
+              setMessages(dbMessages);
+            } else {
+              setMessages([
+                {
+                  role: "assistant",
+                  content: "Hi! I've loaded your WhatsApp chat into my memory. Ask me anything about it!",
+                },
+              ]);
+            }
+          }
+        } catch (dbErr) {
+          // If history fetch fails with 404, it means it is a temporary/draft workspace
+          if (active) {
+            setIsSavedWorkspace(false);
+            setMessages([
+              {
+                role: "assistant",
+                content: "Hi! I've loaded your WhatsApp chat into my memory. Ask me anything about it!",
+              },
+            ]);
+          }
         }
       } catch (err: any) {
         if (active) {
@@ -115,6 +138,13 @@ export default function ChatPage({ params }: ChatPageProps) {
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setIsLoading(true);
 
+    // Save user message to database asynchronously if it is a saved workspace
+    if (isSavedWorkspace) {
+      addChatMessage(chatId, "user", userMessage).catch((err) =>
+        console.error("Failed to save user message to DB", err)
+      );
+    }
+
     try {
       const res = await fetch(`${baseUrl}/api/v1/ai/${chatId}/query`, {
         method: "POST",
@@ -129,18 +159,34 @@ export default function ChatPage({ params }: ChatPageProps) {
       }
 
       const data = await res.json();
+      const assistantAnswer = data.answer;
+      
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: data.answer },
+        { role: "assistant", content: assistantAnswer },
       ]);
+
+      // Save assistant response to database asynchronously if it is a saved workspace
+      if (isSavedWorkspace) {
+        addChatMessage(chatId, "assistant", assistantAnswer).catch((err) =>
+          console.error("Failed to save assistant message to DB", err)
+        );
+      }
     } catch (err: any) {
+      const errResponse = "Sorry, I couldn't process that request right now. Please try again.";
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: "Sorry, I couldn't process that request right now. Please try again.",
+          content: errResponse,
         },
       ]);
+
+      if (isSavedWorkspace) {
+        addChatMessage(chatId, "assistant", errResponse).catch((dbErr) =>
+          console.error("Failed to save assistant error message to DB", dbErr)
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -187,6 +233,14 @@ export default function ChatPage({ params }: ChatPageProps) {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Draft Notification Banner */}
+            {!isSavedWorkspace && (
+              <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 text-xs text-amber-600 font-semibold mb-4 mx-auto max-w-xl justify-center animate-in slide-in-from-top duration-300">
+                <Info className="h-4 w-4 shrink-0 text-amber-500" />
+                <span>Draft Session: Click "Save Workspace" on the Analytics page to keep this chat history persistently.</span>
+              </div>
+            )}
+
             {messages.map((msg, idx) => (
               <div
                 key={idx}

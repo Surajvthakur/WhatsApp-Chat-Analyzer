@@ -237,3 +237,35 @@ export async function loadWorkspace(id: string): Promise<WorkspaceLoadResponse> 
   });
   return handleResponse<WorkspaceLoadResponse>(res);
 }
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatHistoryResponse {
+  status: string;
+  messages: ChatMessage[];
+}
+
+export async function getChatHistory(workspaceId: string): Promise<ChatMessage[]> {
+  const res = await fetch(`/api/workspaces/${workspaceId}/chat`);
+  const data = await handleResponse<ChatHistoryResponse>(res);
+  return data.messages;
+}
+
+export async function addChatMessage(
+  workspaceId: string,
+  role: "user" | "assistant",
+  content: string
+): Promise<void> {
+  const res = await fetch(`/api/workspaces/${workspaceId}/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ role, content }),
+  });
+  return handleResponse<void>(res);
+}
+
