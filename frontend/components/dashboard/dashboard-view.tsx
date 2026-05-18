@@ -26,7 +26,6 @@ import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Bot, Save, Loader2 } from "lucide-react";
-import { AskAIModal } from "./ask-ai-modal";
 import { useSession } from "next-auth/react";
 
 interface DashboardViewProps {
@@ -41,7 +40,6 @@ export function DashboardView({
   onUserChange,
 }: DashboardViewProps) {
   const { data: session } = useSession();
-  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("WhatsApp Chat Analysis");
   const [isSaving, setIsSaving] = useState(false);
@@ -161,22 +159,9 @@ export function DashboardView({
                 Save Workspace (Login)
               </Button>
             )}
-            <Button
-              onClick={() => setIsAIModalOpen(true)}
-              className="flex items-center gap-2 w-full sm:w-auto"
-            >
-              <Bot className="h-4 w-4" />
-              Ask AI
-            </Button>
           </div>
         </div>
       </div>
-
-      <AskAIModal
-        chatId={chatId}
-        isOpen={isAIModalOpen}
-        onClose={() => setIsAIModalOpen(false)}
-      />
 
       {isSaveModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
