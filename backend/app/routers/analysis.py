@@ -72,7 +72,7 @@ async def upload_chat(file: UploadFile = File(...)):
             detail="Could not parse chat. Ensure the file is a valid WhatsApp export.",
         )
 
-    chat_id = store.create(df)
+    chat_id = store.create(df, raw_text=data)
     start, end = get_date_range(df)
 
     return ChatUploadResponse(

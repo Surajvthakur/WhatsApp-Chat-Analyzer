@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 50
     groq_api_key: str = ""
     groq_model: str = "llama3-8b-8192"
+    qdrant_url: str = "http://localhost:6333"
 
     model_config = {"env_file": ".env"}
 
