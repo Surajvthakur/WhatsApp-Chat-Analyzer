@@ -4,8 +4,6 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: whatsapp-analyzer-api
-    ports:
-      - "8000:8000"
     env_file:
       - ./backend/.env
     healthcheck:
