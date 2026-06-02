@@ -65,7 +65,7 @@ export default function HomePage() {
               <Button size="lg">Get started — upload chat</Button>
             </Link>
             <a
-              href="https://faq.whatsapp.com/general/chats/how-to-export-your-chat-history"
+              href="https://faq.whatsapp.com/1180414079177245/?helpref=uf_share"
               target="_blank"
               rel="noopener noreferrer"
             >
