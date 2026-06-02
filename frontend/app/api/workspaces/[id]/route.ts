@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
 
 const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -32,8 +33,11 @@ export async function DELETE(req: NextRequest, { params }: Context) {
 
     // 2. Call FastAPI to delete from Qdrant and RAM
     try {
+      const cookieStore = await cookies();
+      const token = cookieStore.get("authjs.session-token")?.value || cookieStore.get("__Secure-authjs.session-token")?.value;
       const deleteResponse = await fetch(`${BACKEND_URL}/api/v1/workspaces/${id}`, {
         method: "DELETE",
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
       });
       if (!deleteResponse.ok) {
         console.warn(`Failed to delete workspace embeddings from FastAPI for ID ${id}`);

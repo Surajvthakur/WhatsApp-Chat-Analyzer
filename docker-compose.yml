@@ -28,7 +28,7 @@ services:
       dockerfile: Dockerfile
       args:
         # Browser calls the API on the host-mapped port
-        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_API_URL: http://localhost:3000
     container_name: whatsapp-analyzer-web
     ports:
       - "3000:3000"

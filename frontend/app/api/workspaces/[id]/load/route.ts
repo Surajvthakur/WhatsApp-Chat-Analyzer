@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
 
 const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -32,10 +33,13 @@ export async function POST(req: NextRequest, { params }: Context) {
     }
 
     // 3. Post to FastAPI backend to restore the chat data in RAM
+    const cookieStore = await cookies();
+    const token = cookieStore.get("authjs.session-token")?.value || cookieStore.get("__Secure-authjs.session-token")?.value;
     const loadResponse = await fetch(`${BACKEND_URL}/api/v1/workspaces/${id}/load`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
         raw_text: workspace.chatData,
