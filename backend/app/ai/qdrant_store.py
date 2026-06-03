@@ -16,7 +16,11 @@ def get_qdrant_client():
     if _client is None:
         logger.info(f"Initializing Qdrant client at URL: {settings.qdrant_url}")
         # Add timeout to prevent hangs
-        _client = QdrantClient(url=settings.qdrant_url, timeout=10.0)
+        _client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key if settings.qdrant_api_key else None,
+            timeout=10.0
+        )
     return _client
 
 def init_collection():

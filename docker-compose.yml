@@ -56,6 +56,8 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
+    env_file:
+      - ./backend/.env
     volumes:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
