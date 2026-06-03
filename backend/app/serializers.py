@@ -2,6 +2,7 @@ import io
 from datetime import date, datetime
 
 import pandas as pd
+from pydantic import TypeAdapter
 
 from app.schemas import (
     BusyUserItem,
@@ -14,6 +15,15 @@ from app.schemas import (
     TimelinePoint,
     WordCount,
 )
+
+# Initialize TypeAdapters for Pydantic list validation
+timeline_adapter = TypeAdapter(list[TimelinePoint])
+daily_timeline_adapter = TypeAdapter(list[DailyTimelinePoint])
+labeled_count_adapter = TypeAdapter(list[LabeledCount])
+busy_user_adapter = TypeAdapter(list[BusyUserItem])
+busy_percent_adapter = TypeAdapter(list[BusyUserPercent])
+word_count_adapter = TypeAdapter(list[WordCount])
+emoji_count_adapter = TypeAdapter(list[EmojiCount])
 
 
 def build_user_list(df: pd.DataFrame) -> list[str]:
@@ -43,27 +53,31 @@ def _to_iso(value) -> str:
 
 
 def monthly_timeline_to_json(df: pd.DataFrame) -> list[TimelinePoint]:
-    return [
-        TimelinePoint(time=str(time), message=int(message))
-        for time, message in zip(df["time"], df["message"])
-    ]
+    if df.empty:
+        return []
+    records = df.to_dict(orient="records")
+    return timeline_adapter.validate_python(records)
 
 
 def daily_timeline_to_json(df: pd.DataFrame) -> list[DailyTimelinePoint]:
     if df.empty:
         return []
-    only_dates = df["only_date"].apply(lambda x: x.isoformat() if hasattr(x, "isoformat") else str(x))
-    return [
-        DailyTimelinePoint(only_date=str(d), message=int(m))
-        for d, m in zip(only_dates, df["message"])
-    ]
+    df_copy = df.copy()
+    df_copy["only_date"] = df_copy["only_date"].apply(
+        lambda x: x.isoformat() if hasattr(x, "isoformat") else str(x)
+    )
+    records = df_copy.to_dict(orient="records")
+    return daily_timeline_adapter.validate_python(records)
 
 
 def series_to_labeled_counts(series: pd.Series) -> list[LabeledCount]:
-    return [
-        LabeledCount(label=str(idx), count=int(val))
-        for idx, val in series.items()
-    ]
+    if series.empty:
+        return []
+    df = series.reset_index()
+    df.columns = ["label", "count"]
+    df["label"] = df["label"].astype(str)
+    records = df.to_dict(orient="records")
+    return labeled_count_adapter.validate_python(records)
 
 
 def heatmap_to_json(heatmap: pd.DataFrame) -> HeatmapResponse:
@@ -74,36 +88,36 @@ def heatmap_to_json(heatmap: pd.DataFrame) -> HeatmapResponse:
 
 
 def busy_users_to_json(x: pd.Series, percent_df: pd.DataFrame) -> BusyUsersResponse:
-    top_users = [
-        BusyUserItem(user=str(name), count=int(count))
-        for name, count in x.items()
-    ]
-    percentages = [
-        BusyUserPercent(
-            name=str(name),
-            percent=float(percent),
-        )
-        for name, percent in zip(percent_df["name"], percent_df["percent"])
-    ]
+    df_users = x.reset_index()
+    df_users.columns = ["user", "count"]
+    df_users["user"] = df_users["user"].astype(str)
+    top_users_records = df_users.to_dict(orient="records")
+    top_users = busy_user_adapter.validate_python(top_users_records)
+
+    percentages_records = percent_df.to_dict(orient="records")
+    percentages = busy_percent_adapter.validate_python(percentages_records)
+
     return BusyUsersResponse(top_users=top_users, percentages=percentages)
 
 
 def common_words_to_json(df: pd.DataFrame) -> list[WordCount]:
     if df.empty:
         return []
-    return [
-        WordCount(word=str(word), count=int(count))
-        for word, count in zip(df.iloc[:, 0], df.iloc[:, 1])
-    ]
+    df_copy = df.copy()
+    df_copy.columns = ["word", "count"]
+    df_copy["word"] = df_copy["word"].astype(str)
+    records = df_copy.to_dict(orient="records")
+    return word_count_adapter.validate_python(records)
 
 
 def emoji_to_json(df: pd.DataFrame) -> list[EmojiCount]:
     if df.empty:
         return []
-    return [
-        EmojiCount(emoji=str(emoji), count=int(count))
-        for emoji, count in zip(df.iloc[:, 0], df.iloc[:, 1])
-    ]
+    df_copy = df.copy()
+    df_copy.columns = ["emoji", "count"]
+    df_copy["emoji"] = df_copy["emoji"].astype(str)
+    records = df_copy.to_dict(orient="records")
+    return emoji_count_adapter.validate_python(records)
 
 
 def wordcloud_to_png(wordcloud) -> bytes:
