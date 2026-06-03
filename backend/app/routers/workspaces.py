@@ -95,9 +95,12 @@ def persist_workspace(request: PersistRequest):
             
             # Use the first 25 messages of the conversation as a sample for LLM summary
             sample_df = df[df["user"] != "group_notification"].head(25)
-            chat_sample = ""
-            for _, r in sample_df.iterrows():
-                chat_sample += f"{r.get('user', 'User')}: {r.get('message', '')}\n"
+            users = sample_df["user"] if "user" in sample_df.columns else ["User"] * len(sample_df)
+            messages = sample_df["message"] if "message" in sample_df.columns else [""] * len(sample_df)
+            chat_sample = "".join(
+                f"{u}: {m}\n"
+                for u, m in zip(users, messages)
+            )
                 
             prompt = (
                 "You are an expert chat analyzer. Provide a brief 2-sentence summary "
