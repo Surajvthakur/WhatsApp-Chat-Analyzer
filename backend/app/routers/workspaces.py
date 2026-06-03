@@ -22,9 +22,6 @@ class PersistRequest(BaseModel):
     workspace_id: str
     workspace_name: str
 
-class LoadRequest(BaseModel):
-    raw_text: str
-
 @router.post("/persist")
 def persist_workspace(request: PersistRequest):
     """
@@ -141,16 +138,38 @@ def persist_workspace(request: PersistRequest):
     }
 
 @router.post("/{workspace_id}/load")
-def load_workspace(workspace_id: str, request: LoadRequest):
+def load_workspace(workspace_id: str):
     """
-    Loads raw chat text from a saved workspace, parses it,
+    Loads raw chat text from PostgreSQL for a saved workspace, parses it,
     and populates it into FastAPI's RAM SessionStore under the workspace_id.
     This enables the entire analytics dashboard to work instantly.
     """
-    raw_text = request.raw_text
-    if not raw_text:
-        raise HTTPException(status_code=400, detail="raw_text is required.")
-        
+    if not settings.database_url:
+        logger.error("Database URL is not configured.")
+        raise HTTPException(
+            status_code=500,
+            detail="Database URL is not configured in settings."
+        )
+
+    try:
+        import psycopg2
+        logger.info(f"Connecting to database to fetch workspace {workspace_id}...")
+        conn = psycopg2.connect(settings.database_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute('SELECT "chatData" FROM "Workspace" WHERE "id" = %s', (workspace_id,))
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail=f"Workspace with ID {workspace_id} not found in database.")
+                raw_text = row[0]
+        finally:
+            conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch workspace from PostgreSQL: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch workspace from database: {str(e)}")
+
     try:
         df = preprocessor.preprocess(raw_text)
         if df.empty:
