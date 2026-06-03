@@ -8,32 +8,28 @@ def chunk_chat_data(df: pd.DataFrame, chunk_size: int = 15) -> list[str]:
     if df is None or df.empty:
         return []
 
-    chunks = []
-    current_chunk = []
-    
-    # Iterate through the rows of the dataframe
-    for index, row in df.iterrows():
-        # Format each line as "User: Message" or "[Date] User: Message"
-        date_str = str(row['date']) if pd.notna(row.get('date')) else ""
-        user = row.get('user', 'Unknown')
-        msg = row.get('message', '')
-        
-        # Omit media omitted messages or system messages if desired, but for now we keep everything
-        # just formatting it cleanly.
-        if msg == '<Media omitted>' or msg.strip() == '':
-            continue
-            
-        line = f"[{date_str}] {user}: {msg}"
-        current_chunk.append(line)
-        
-        if len(current_chunk) >= chunk_size:
-            chunks.append("\n".join(current_chunk))
-            current_chunk = []
-            
-    # Add any remaining messages
-    if current_chunk:
-        chunks.append("\n".join(current_chunk))
-        
+    dates = df['date'] if 'date' in df.columns else pd.Series(pd.NaT, index=df.index)
+    users = df['user'] if 'user' in df.columns else pd.Series('Unknown', index=df.index)
+    messages = df['message'] if 'message' in df.columns else pd.Series('', index=df.index)
+
+    messages = messages.astype(str)
+    users = users.astype(str)
+
+    # Vectorized date string conversion
+    date_strs = dates.astype(str).where(dates.notna(), "")
+
+    # Vectorized line formatting
+    lines = "[" + date_strs + "] " + users + ": " + messages
+
+    # Vectorized message filtering
+    valid_mask = (messages != '<Media omitted>') & (messages.str.strip() != '')
+    filtered_lines = lines[valid_mask].tolist()
+
+    # Chunking using list comprehension
+    chunks = [
+        "\n".join(filtered_lines[i : i + chunk_size])
+        for i in range(0, len(filtered_lines), chunk_size)
+    ]
     return chunks
 
 def get_chunks_metadata(df: pd.DataFrame, chunk_size: int = 15) -> list[dict]:
@@ -46,50 +42,48 @@ def get_chunks_metadata(df: pd.DataFrame, chunk_size: int = 15) -> list[dict]:
     if df is None or df.empty:
         return []
 
+    dates = df['date'] if 'date' in df.columns else pd.Series(pd.NaT, index=df.index)
+    users = df['user'] if 'user' in df.columns else pd.Series('Unknown', index=df.index)
+    messages = df['message'] if 'message' in df.columns else pd.Series('', index=df.index)
+
+    messages = messages.astype(str)
+    users = users.astype(str)
+
+    # Vectorized date string conversion
+    date_strs = dates.astype(str).where(dates.notna(), "")
+
+    # Vectorized line formatting
+    lines = "[" + date_strs + "] " + users + ": " + messages
+
+    # Vectorized message filtering
+    valid_mask = (messages != '<Media omitted>') & (messages.str.strip() != '')
+
+    filtered_lines = lines[valid_mask].tolist()
+    filtered_users = users[valid_mask].tolist()
+    filtered_dates = dates[valid_mask].tolist()
+
     chunks_metadata = []
-    current_chunk = []
-    current_speakers = set()
-    current_dates = []
-    
-    for index, row in df.iterrows():
-        date_str = str(row['date']) if pd.notna(row.get('date')) else ""
-        user = row.get('user', 'Unknown')
-        msg = row.get('message', '')
-        
-        if msg == '<Media omitted>' or msg.strip() == '':
-            continue
-            
-        line = f"[{date_str}] {user}: {msg}"
-        current_chunk.append(line)
-        if user and user != 'group_notification':
-            current_speakers.add(user)
-        if pd.notna(row.get('date')):
-            current_dates.append(row['date'])
-            
-        if len(current_chunk) >= chunk_size:
-            ts_range = _format_date_range(current_dates)
-            speakers = ", ".join(sorted(current_speakers)) if current_speakers else "Unknown"
-            
-            chunks_metadata.append({
-                "text": "\n".join(current_chunk),
-                "speaker": speakers,
-                "timestamp_range": ts_range
-            })
-            current_chunk = []
-            current_speakers = set()
-            current_dates = []
-            
-    # Add any remaining messages
-    if current_chunk:
-        ts_range = _format_date_range(current_dates)
-        speakers = ", ".join(sorted(current_speakers)) if current_speakers else "Unknown"
-        
+    num_items = len(filtered_lines)
+
+    for i in range(0, num_items, chunk_size):
+        chunk_lines = filtered_lines[i : i + chunk_size]
+        chunk_users = filtered_users[i : i + chunk_size]
+        chunk_dates = filtered_dates[i : i + chunk_size]
+
+        # Get unique speakers, omitting group_notification and falsy/None
+        speakers_set = {u for u in chunk_users if u and u != 'group_notification'}
+        speakers = ", ".join(sorted(speakers_set)) if speakers_set else "Unknown"
+
+        # Format date range for valid dates
+        valid_dates = [d for d in chunk_dates if pd.notna(d)]
+        ts_range = _format_date_range(valid_dates)
+
         chunks_metadata.append({
-            "text": "\n".join(current_chunk),
+            "text": "\n".join(chunk_lines),
             "speaker": speakers,
             "timestamp_range": ts_range
         })
-        
+
     return chunks_metadata
 
 def _format_date_range(dates) -> str:

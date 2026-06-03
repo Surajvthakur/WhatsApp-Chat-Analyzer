@@ -44,23 +44,19 @@ def _to_iso(value) -> str:
 
 def monthly_timeline_to_json(df: pd.DataFrame) -> list[TimelinePoint]:
     return [
-        TimelinePoint(time=str(row["time"]), message=int(row["message"]))
-        for _, row in df.iterrows()
+        TimelinePoint(time=str(time), message=int(message))
+        for time, message in zip(df["time"], df["message"])
     ]
 
 
 def daily_timeline_to_json(df: pd.DataFrame) -> list[DailyTimelinePoint]:
-    points = []
-    for _, row in df.iterrows():
-        only_date = row["only_date"]
-        if hasattr(only_date, "isoformat"):
-            only_date = only_date.isoformat()
-        else:
-            only_date = str(only_date)
-        points.append(
-            DailyTimelinePoint(only_date=only_date, message=int(row["message"]))
-        )
-    return points
+    if df.empty:
+        return []
+    only_dates = df["only_date"].apply(lambda x: x.isoformat() if hasattr(x, "isoformat") else str(x))
+    return [
+        DailyTimelinePoint(only_date=str(d), message=int(m))
+        for d, m in zip(only_dates, df["message"])
+    ]
 
 
 def series_to_labeled_counts(series: pd.Series) -> list[LabeledCount]:
@@ -84,25 +80,29 @@ def busy_users_to_json(x: pd.Series, percent_df: pd.DataFrame) -> BusyUsersRespo
     ]
     percentages = [
         BusyUserPercent(
-            name=str(row["name"]),
-            percent=float(row["percent"]),
+            name=str(name),
+            percent=float(percent),
         )
-        for _, row in percent_df.iterrows()
+        for name, percent in zip(percent_df["name"], percent_df["percent"])
     ]
     return BusyUsersResponse(top_users=top_users, percentages=percentages)
 
 
 def common_words_to_json(df: pd.DataFrame) -> list[WordCount]:
+    if df.empty:
+        return []
     return [
-        WordCount(word=str(row[0]), count=int(row[1]))
-        for _, row in df.iterrows()
+        WordCount(word=str(word), count=int(count))
+        for word, count in zip(df.iloc[:, 0], df.iloc[:, 1])
     ]
 
 
 def emoji_to_json(df: pd.DataFrame) -> list[EmojiCount]:
+    if df.empty:
+        return []
     return [
-        EmojiCount(emoji=str(row[0]), count=int(row[1]))
-        for _, row in df.iterrows()
+        EmojiCount(emoji=str(emoji), count=int(count))
+        for emoji, count in zip(df.iloc[:, 0], df.iloc[:, 1])
     ]
 
 

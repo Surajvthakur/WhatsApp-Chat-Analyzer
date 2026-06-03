@@ -43,22 +43,15 @@ def preprocess(chat_data):
     df['date'] = df['date'].apply(clean_date)
 
     # Try parsing the dates with flexible parsing
-    for i, row in df.iterrows():
-        date_str = row['date']
-        try:
-            df.at[i, 'date'] = pd.to_datetime(date_str, dayfirst=True, errors='raise')
-        except Exception:
-            df.at[i, 'date'] = pd.NaT  # Set as NaT if all formats fail
+    df['date'] = pd.to_datetime(df['date'], dayfirst=True, errors='coerce', format='mixed')
 
     # Remove unwanted patterns like '\n[', '\n‎[', or '‎[' from messages
     df['message'] = df['message'].str.replace(r'[\n‎]*\[$', '', regex=True)
 
-    # Ensure 'date' column is in datetime format (coerce errors to NaT)
-    df['date'] = pd.to_datetime(df['date'], errors='coerce')
-
     # Extract user and clean message
     df['user'] = df['message'].str.extract(r"^(.*?):", expand=False).fillna("System")
 
+    # Clean message
     df['message'] = df['message'].str.split(':', n=1).str[1].fillna(df['message']).str.strip()
     df['user'] = df['user'].str.strip()
 
@@ -76,15 +69,10 @@ def preprocess(chat_data):
         df['month_num'] = df['date'].dt.month
         df['day_name'] = df['date'].dt.day_name()
 
-        period = []
-        for hour in df[['day_name', 'hour']]['hour']:
-            if hour == 23:
-                period.append(str(hour) + "-" + str('00'))
-            elif hour == 0:
-                period.append(str('00') + "-" + str(hour + 1))
-            else:
-                period.append(str(hour) + "-" + str(hour + 1))
-
-        df['period'] = period
+        h = df['hour']
+        h_next = h + 1
+        h_str = h.astype(str).where(h != 0, '00')
+        h_next_str = h_next.astype(str).where(h != 23, '00')
+        df['period'] = h_str + '-' + h_next_str
 
     return df
