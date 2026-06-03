@@ -32,9 +32,9 @@ def preprocess(chat_data):
     messages = re.split(date_pattern, chat_data, flags=re.VERBOSE)[1:]  # Skip the first split (empty)
     messages = [msg.strip() for i, msg in enumerate(messages) if i % 4 == 3]  # Keep every fourth item (actual messages)
 
-    # Ensure equal lengths
-    if len(dates) != len(messages):
-        return pd.DataFrame()  # Return empty DataFrame if there's a mismatch
+    # Ensure equal lengths and that we parsed at least one message
+    if len(dates) != len(messages) or len(dates) == 0:
+        return pd.DataFrame()  # Return empty DataFrame if there's a mismatch or no messages parsed
 
     # Create DataFrame
     df = pd.DataFrame({'date': dates, 'message': messages})
