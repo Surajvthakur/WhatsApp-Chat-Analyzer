@@ -18,9 +18,13 @@ export async function POST(req: NextRequest, { params }: Context) {
 
     const { id } = await params;
 
-    // 1. Fetch workspace from database
+    // 1. Fetch workspace from database (only select metadata to avoid loading huge chatData)
     const workspace = await prisma.workspace.findUnique({
       where: { id },
+      select: {
+        id: true,
+        userId: true,
+      },
     });
 
     if (!workspace) {
@@ -32,18 +36,14 @@ export async function POST(req: NextRequest, { params }: Context) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // 3. Post to FastAPI backend to restore the chat data in RAM
+    // 3. Post to FastAPI backend to restore the chat data in RAM (no body containing raw_text needed anymore!)
     const cookieStore = await cookies();
     const token = cookieStore.get("authjs.session-token")?.value || cookieStore.get("__Secure-authjs.session-token")?.value;
     const loadResponse = await fetch(`${BACKEND_URL}/api/v1/workspaces/${id}/load`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         ...(token ? { "Authorization": `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({
-        raw_text: workspace.chatData,
-      }),
     });
 
     if (!loadResponse.ok) {

@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str = ""
     auth_secret: str = ""
+    database_url: str = ""
 
     model_config = {"env_file": ".env"}
 
