@@ -10,6 +10,7 @@ from app.config import settings
 from app.routers import analysis
 from app.routers import ai_chat
 from app.routers import workspaces
+from app.middleware.auth import AuthMiddleware
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 os.chdir(BACKEND_ROOT)
@@ -27,6 +28,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.add_middleware(AuthMiddleware)
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(

@@ -4,8 +4,6 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: whatsapp-analyzer-api
-    ports:
-      - "8000:8000"
     env_file:
       - ./backend/.env
     healthcheck:
@@ -28,7 +26,7 @@ services:
       dockerfile: Dockerfile
       args:
         # Browser calls the API on the host-mapped port
-        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_API_URL: http://localhost:3000
     container_name: whatsapp-analyzer-web
     ports:
       - "3000:3000"
