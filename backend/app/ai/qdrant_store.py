@@ -35,7 +35,7 @@ def init_collection():
             client.create_collection(
                 collection_name=COLLECTION_NAME,
                 vectors_config=VectorParams(
-                    size=384,  # Dimension for SentenceTransformer 'all-MiniLM-L6-v2'
+                    size=settings.embedding_dimension,
                     distance=Distance.COSINE
                 )
             )

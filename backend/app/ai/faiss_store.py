@@ -1,31 +1,33 @@
-import faiss
 import numpy as np
 
 def create_faiss_index(embeddings: list[list[float]]):
     """
-    Creates a temporary FAISS index in memory from a list of embeddings.
+    Creates a temporary index (numpy array) in memory from a list of embeddings.
+    This replaces FAISS with pure NumPy to avoid installing heavy C++ binaries.
     """
     if embeddings is None or len(embeddings) == 0:
         return None
         
-    embeddings_array = np.array(embeddings).astype('float32')
-    dimension = embeddings_array.shape[1]
-    
-    # Using L2 distance
-    index = faiss.IndexFlatL2(dimension)
-    index.add(embeddings_array)
-    
-    return index
+    # Just convert and return the embeddings as a float32 numpy array
+    return np.array(embeddings).astype('float32')
 
 def search_faiss_index(index, query_embedding: list[float], top_k: int = 5) -> list[int]:
     """
-    Searches the FAISS index for the top_k most similar embeddings to the query.
+    Searches the in-memory numpy array for the top_k most similar embeddings to the query
+    using Euclidean (L2) distance, maintaining compatibility with the FAISS IndexFlatL2 API.
     Returns the indices of the matches.
     """
     if index is None or query_embedding is None or len(query_embedding) == 0:
         return []
         
-    query_array = np.array([query_embedding]).astype('float32')
-    distances, indices = index.search(query_array, top_k)
+    # index shape: (num_embeddings, dimension)
+    # query_array shape: (dimension,)
+    query_array = np.array(query_embedding).astype('float32')
     
-    return indices[0].tolist()
+    # Calculate squared L2 distance: sum((embedding - query) ** 2) for each embedding
+    distances = np.sum((index - query_array) ** 2, axis=1)
+    
+    # Sort distances ascending (smallest distance first) and get the top_k indices
+    top_indices = np.argsort(distances)[:top_k]
+    
+    return top_indices.tolist()
