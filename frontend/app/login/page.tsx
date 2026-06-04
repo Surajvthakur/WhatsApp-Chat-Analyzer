@@ -29,6 +29,8 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  const [isVerifying, setIsVerifying] = useState(false);
+
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Auto-focus first OTP input when step changes
@@ -75,6 +77,7 @@ export default function LoginPage() {
     const otpCode = code || otpDigits.join("");
     if (otpCode.length !== 6) return;
 
+    setIsVerifying(true);
     setIsLoading(true);
     setError(null);
 
@@ -92,6 +95,11 @@ export default function LoginPage() {
 
       const data = await res.json();
       login(data.access_token);
+      
+      // Delay slightly for verification animation feedback
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      
+      setIsVerifying(false);
       setIsSuccess(true);
 
       setTimeout(() => router.push("/analyze"), 1200);
@@ -99,6 +107,7 @@ export default function LoginPage() {
       const message =
         err instanceof Error ? err.message : "Verification failed";
       setError(message);
+      setIsVerifying(false);
       setOtpDigits(Array(6).fill(""));
       inputRefs.current[0]?.focus();
     } finally {
@@ -147,6 +156,26 @@ export default function LoginPage() {
   };
 
   // ── Success screen ───────────────────────────────────────────────────────
+
+  if (isVerifying) {
+    return (
+      <div className="flex min-h-[80vh] items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
+        <div className="w-full max-w-md space-y-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center shadow-2xl backdrop-blur-md animate-in fade-in zoom-in duration-300">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[var(--primary)]/10 text-[var(--primary)] animate-pulse">
+            <Loader2 className="h-10 w-10 animate-spin text-[var(--primary)]" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold tracking-tight">
+              Verifying your code
+            </h2>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Checking details with our secure server...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isSuccess) {
     return (

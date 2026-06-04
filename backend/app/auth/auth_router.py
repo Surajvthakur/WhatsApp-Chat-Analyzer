@@ -120,8 +120,7 @@ async def register(body: RegisterRequest, bg: BackgroundTasks):
     """
     user = await asyncio.to_thread(_create_user_if_not_exists, body.email)
 
-    if user["isActive"]:
-        raise HTTPException(status_code=409, detail="This email is already registered and verified")
+
 
     code = generate_otp()
     await save_otp(body.email, code)
