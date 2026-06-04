@@ -1,6 +1,12 @@
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:8000";
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("auth_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -104,13 +110,17 @@ export async function uploadChat(file: File): Promise<ChatUploadResponse> {
   form.append("file", file);
   const res = await fetch(`${API_BASE}/api/v1/chats`, {
     method: "POST",
+    headers: getAuthHeaders(),
     body: form,
   });
   return handleResponse<ChatUploadResponse>(res);
 }
 
 async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+  const res = await fetch(`${API_BASE}${path}`, {
+    cache: "no-store",
+    headers: getAuthHeaders(),
+  });
   return handleResponse<T>(res);
 }
 
@@ -212,6 +222,7 @@ export async function saveWorkspace(chatId: string, workspaceName: string): Prom
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({ chatId, workspaceName }),
   });
@@ -219,7 +230,7 @@ export async function saveWorkspace(chatId: string, workspaceName: string): Prom
 }
 
 export async function getWorkspaces(): Promise<Workspace[]> {
-  const res = await fetch("/api/workspaces");
+  const res = await fetch("/api/workspaces", { headers: getAuthHeaders() });
   const data = await handleResponse<WorkspaceListResponse>(res);
   return data.workspaces;
 }
@@ -227,6 +238,7 @@ export async function getWorkspaces(): Promise<Workspace[]> {
 export async function deleteWorkspace(id: string): Promise<void> {
   const res = await fetch(`/api/workspaces/${id}`, {
     method: "DELETE",
+    headers: getAuthHeaders(),
   });
   return handleResponse<void>(res);
 }
@@ -234,6 +246,7 @@ export async function deleteWorkspace(id: string): Promise<void> {
 export async function loadWorkspace(id: string): Promise<WorkspaceLoadResponse> {
   const res = await fetch(`/api/workspaces/${id}/load`, {
     method: "POST",
+    headers: getAuthHeaders(),
   });
   return handleResponse<WorkspaceLoadResponse>(res);
 }
@@ -249,7 +262,7 @@ export interface ChatHistoryResponse {
 }
 
 export async function getChatHistory(workspaceId: string): Promise<ChatMessage[]> {
-  const res = await fetch(`/api/workspaces/${workspaceId}/chat`);
+  const res = await fetch(`/api/workspaces/${workspaceId}/chat`, { headers: getAuthHeaders() });
   const data = await handleResponse<ChatHistoryResponse>(res);
   return data.messages;
 }
@@ -263,6 +276,7 @@ export async function addChatMessage(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({ role, content }),
   });

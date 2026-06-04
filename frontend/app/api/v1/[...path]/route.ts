@@ -1,23 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
-import { cookies } from "next/headers";
+import { verifyAuth } from "@/lib/auth-verify";
 
 const BACKEND_URL = process.env.BACKEND_API_URL || "http://localhost:8000";
 
 async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
-  const session = await auth();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const { path } = await params;
   const pathStr = path.join("/");
+
+  const isPublicPath = pathStr === "auth/register" || pathStr === "auth/verify-otp";
+
+  if (!isPublicPath) {
+    const user = await verifyAuth(req);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
   const url = new URL(req.nextUrl);
   
   const targetUrl = `${BACKEND_URL}/api/v1/${pathStr}${url.search}`;
 
-  const cookieStore = await cookies();
-  const token = cookieStore.get("authjs.session-token")?.value || cookieStore.get("__Secure-authjs.session-token")?.value;
+  const token = req.headers.get("Authorization")?.slice(7) || "";
 
   const headers = new Headers();
   
@@ -35,7 +37,7 @@ async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ pa
   }
 
   try {
-    let body: any = undefined;
+    let body: ArrayBuffer | undefined = undefined;
     if (req.method !== "GET" && req.method !== "HEAD") {
       body = await req.arrayBuffer();
     }
@@ -62,7 +64,7 @@ async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ pa
       status: res.status,
       headers: resHeaders,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Proxy error for target:", targetUrl, error);
     return NextResponse.json({ error: "Failed to connect to backend" }, { status: 502 });
   }

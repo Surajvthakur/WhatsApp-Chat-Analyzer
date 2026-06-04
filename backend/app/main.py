@@ -10,6 +10,7 @@ from app.config import settings
 from app.routers import analysis
 from app.routers import ai_chat
 from app.routers import workspaces
+from app.auth.auth_router import router as auth_router
 from app.middleware.auth import AuthMiddleware
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
@@ -46,6 +47,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(analysis.router)
 app.include_router(ai_chat.router)
 app.include_router(workspaces.router)

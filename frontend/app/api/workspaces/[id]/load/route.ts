@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { verifyAuth } from "@/lib/auth-verify";
 import { prisma } from "@/lib/prisma";
-import { cookies } from "next/headers";
 
 const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -11,34 +10,28 @@ interface Context {
 
 export async function POST(req: NextRequest, { params }: Context) {
   try {
-    const session = await auth();
-    if (!session || !session.user || !session.user.id) {
+    const user = await verifyAuth(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { id } = await params;
 
-    // 1. Fetch workspace from database (only select metadata to avoid loading huge chatData)
     const workspace = await prisma.workspace.findUnique({
       where: { id },
-      select: {
-        id: true,
-        userId: true,
-      },
+      select: { id: true, userId: true },
     });
 
     if (!workspace) {
       return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
     }
 
-    // 2. Check ownership
-    if (workspace.userId !== session.user.id) {
+    if (workspace.userId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // 3. Post to FastAPI backend to restore the chat data in RAM (no body containing raw_text needed anymore!)
-    const cookieStore = await cookies();
-    const token = cookieStore.get("authjs.session-token")?.value || cookieStore.get("__Secure-authjs.session-token")?.value;
+    // Post to FastAPI backend to restore the chat data in RAM
+    const token = req.headers.get("Authorization")?.slice(7) || "";
     const loadResponse = await fetch(`${BACKEND_URL}/api/v1/workspaces/${id}/load`, {
       method: "POST",
       headers: {
@@ -56,7 +49,6 @@ export async function POST(req: NextRequest, { params }: Context) {
 
     const result = await loadResponse.json();
 
-    // 4. Return success and the loaded workspace stats
     return NextResponse.json({
       status: "success",
       chatId: result.chat_id,
@@ -64,11 +56,9 @@ export async function POST(req: NextRequest, { params }: Context) {
       messageCount: result.message_count,
       dateRange: result.date_range,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error loading workspace into RAM:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to load workspace" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Failed to load workspace";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
