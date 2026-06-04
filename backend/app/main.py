@@ -20,6 +20,12 @@ if str(BACKEND_ROOT) not in sys.path:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Asynchronously check and pull the Ollama embedding model on startup
+    import asyncio
+    from app.ai.embeddings import ensure_model_exists
+    
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, ensure_model_exists)
     yield
 
 

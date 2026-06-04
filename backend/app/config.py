@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     qdrant_api_key: str = ""
     auth_secret: str = ""
     database_url: str = ""
+    
+    # Ollama integration settings
+    ollama_url: str = "http://localhost:11434"
+    embedding_model: str = "all-minilm"
+    embedding_dimension: int = 384
 
     model_config = {"env_file": ".env"}
 

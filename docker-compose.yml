@@ -6,6 +6,8 @@ services:
     container_name: whatsapp-analyzer-api
     env_file:
       - ./backend/.env
+    environment:
+      - OLLAMA_URL=http://ollama:11434
     healthcheck:
       test:
         [
@@ -62,6 +64,16 @@ services:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: whatsapp-analyzer-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   qdrant_data:
+  ollama_data:
