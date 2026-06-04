@@ -1,22 +1,29 @@
-import NextAuth from "next-auth"
-import { authConfig } from "./auth.config"
+import { NextResponse, type NextRequest } from "next/server";
 
-const { auth } = NextAuth(authConfig)
+/**
+ * Lightweight edge middleware — protects server-rendered routes by checking
+ * for the presence of a JWT cookie. Actual token validation happens on the
+ * FastAPI backend; this is just a navigation guard.
+ */
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
 
-export default auth((req) => {
-  const isLoggedIn = !!req.auth;
-  const { pathname } = req.nextUrl;
-  
-  const isProtectedRoute = pathname.startsWith('/dashboard') || 
-                           pathname.startsWith('/workspaces') || 
-                           pathname.startsWith('/profile');
-                           
-  if (isProtectedRoute && !isLoggedIn) {
-    const newUrl = new URL("/login", req.nextUrl.origin);
-    return Response.redirect(newUrl);
+  const isProtectedRoute =
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/workspaces") ||
+    pathname.startsWith("/profile");
+
+  if (isProtectedRoute) {
+    const token = request.cookies.get("auth_token")?.value;
+    if (!token) {
+      const loginUrl = new URL("/login", request.nextUrl.origin);
+      return NextResponse.redirect(loginUrl);
+    }
   }
-})
+
+  return NextResponse.next();
+}
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
-}
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+};

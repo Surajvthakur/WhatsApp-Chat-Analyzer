@@ -1,9 +1,18 @@
-import Link from "next/link";
-import { MessageCircle } from "lucide-react";
-import { auth, signOut } from "@/auth";
+"use client";
 
-export async function SiteHeader() {
-  const session = await auth();
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { MessageCircle } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+
+export function SiteHeader() {
+  const { user, logout } = useAuth();
+  const router = useRouter();
+
+  const handleSignOut = () => {
+    logout();
+    router.push("/");
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--card)]/80 backdrop-blur-md">
@@ -20,24 +29,17 @@ export async function SiteHeader() {
             Analyze Chat
           </Link>
 
-          {session ? (
+          {user ? (
             <div className="flex items-center gap-3">
               <span className="text-xs text-[var(--muted-foreground)] border-r border-[var(--border)] pr-3 py-1 hidden md:inline-block">
-                {session.user?.email}
+                {user.email}
               </span>
-              <form
-                action={async () => {
-                  "use server";
-                  await signOut({ redirectTo: "/" });
-                }}
+              <button
+                onClick={handleSignOut}
+                className="rounded-lg border border-[var(--border)] px-3.5 py-1.5 text-xs sm:text-sm font-medium hover:bg-[var(--muted)] transition-colors cursor-pointer"
               >
-                <button
-                  type="submit"
-                  className="rounded-lg border border-[var(--border)] px-3.5 py-1.5 text-xs sm:text-sm font-medium hover:bg-[var(--muted)] transition-colors cursor-pointer"
-                >
-                  Sign Out
-                </button>
-              </form>
+                Sign Out
+              </button>
             </div>
           ) : (
             <Link

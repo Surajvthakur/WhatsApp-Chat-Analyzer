@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { verifyAuth } from "@/lib/auth-verify";
 import { prisma } from "@/lib/prisma";
-import { cookies } from "next/headers";
 
 const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -11,14 +10,13 @@ interface Context {
 
 export async function DELETE(req: NextRequest, { params }: Context) {
   try {
-    const session = await auth();
-    if (!session || !session.user || !session.user.id) {
+    const user = await verifyAuth(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { id } = await params;
 
-    // 1. Fetch workspace and verify ownership
     const workspace = await prisma.workspace.findUnique({
       where: { id },
     });
@@ -27,14 +25,13 @@ export async function DELETE(req: NextRequest, { params }: Context) {
       return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
     }
 
-    if (workspace.userId !== session.user.id) {
+    if (workspace.userId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // 2. Call FastAPI to delete from Qdrant and RAM
+    // Delete from Qdrant and RAM via FastAPI
     try {
-      const cookieStore = await cookies();
-      const token = cookieStore.get("authjs.session-token")?.value || cookieStore.get("__Secure-authjs.session-token")?.value;
+      const token = req.headers.get("Authorization")?.slice(7) || "";
       const deleteResponse = await fetch(`${BACKEND_URL}/api/v1/workspaces/${id}`, {
         method: "DELETE",
         headers: token ? { "Authorization": `Bearer ${token}` } : {},
@@ -46,17 +43,12 @@ export async function DELETE(req: NextRequest, { params }: Context) {
       console.error(`Network error calling FastAPI to delete workspace ${id}:`, apiErr);
     }
 
-    // 3. Delete from PostgreSQL database via Prisma
-    await prisma.workspace.delete({
-      where: { id },
-    });
+    await prisma.workspace.delete({ where: { id } });
 
     return NextResponse.json({ status: "success", message: "Workspace deleted successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting workspace:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to delete workspace" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Failed to delete workspace";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

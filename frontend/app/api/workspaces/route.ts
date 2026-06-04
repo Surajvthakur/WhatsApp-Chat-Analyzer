@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { verifyAuth } from "@/lib/auth-verify";
 import { prisma } from "@/lib/prisma";
-import { cookies } from "next/headers";
 
 const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth();
-    if (!session || !session.user || !session.user.id) {
+    const user = await verifyAuth(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -23,19 +22,17 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Create a draft Workspace in PostgreSQL first
-    // This gives us a unique workspace ID that we can pass to FastAPI/Qdrant
     const workspace = await prisma.workspace.create({
       data: {
-        userId: session.user.id,
+        userId: user.id,
         workspaceName,
-        chatData: "", // filled after FastAPI returns
-        summary: "",  // filled after FastAPI returns
+        chatData: "",
+        summary: "",
       },
     });
 
     // 2. Call the Python FastAPI backend to persist embeddings to Qdrant
-    const cookieStore = await cookies();
-    const token = cookieStore.get("authjs.session-token")?.value || cookieStore.get("__Secure-authjs.session-token")?.value;
+    const token = req.headers.get("Authorization")?.slice(7) || "";
     const persistResponse = await fetch(`${BACKEND_URL}/api/v1/workspaces/persist`, {
       method: "POST",
       headers: {
@@ -50,7 +47,6 @@ export async function POST(req: NextRequest) {
     });
 
     if (!persistResponse.ok) {
-      // If FastAPI fails, clean up the created PostgreSQL record to prevent orphans
       await prisma.workspace.delete({ where: { id: workspace.id } });
       const errorText = await persistResponse.text();
       return NextResponse.json(
@@ -61,7 +57,7 @@ export async function POST(req: NextRequest) {
 
     const result = await persistResponse.json();
 
-    // 3. Update the PostgreSQL record with the raw chat text and summary returned from the backend
+    // 3. Update the PostgreSQL record with the raw chat text and summary
     const finalWorkspace = await prisma.workspace.update({
       where: { id: workspace.id },
       data: {
@@ -79,43 +75,35 @@ export async function POST(req: NextRequest) {
         summary: finalWorkspace.summary,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating workspace:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to create workspace" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Failed to create workspace";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const session = await auth();
-    if (!session || !session.user || !session.user.id) {
+    const user = await verifyAuth(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const workspaces = await prisma.workspace.findMany({
-      where: {
-        userId: session.user.id,
-      },
+      where: { userId: user.id },
       select: {
         id: true,
         workspaceName: true,
         createdAt: true,
         summary: true,
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" },
     });
 
     return NextResponse.json({ workspaces });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error listing workspaces:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to list workspaces" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Failed to list workspaces";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

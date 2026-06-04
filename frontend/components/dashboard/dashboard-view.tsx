@@ -26,7 +26,7 @@ import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Bot, Save, Loader2 } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/auth-context";
 
 interface DashboardViewProps {
   chatId: string;
@@ -39,7 +39,7 @@ export function DashboardView({
   selectedUser,
   onUserChange,
 }: DashboardViewProps) {
-  const { data: session } = useSession();
+  const { user } = useAuth();
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("WhatsApp Chat Analysis");
   const [isSaving, setIsSaving] = useState(false);
@@ -138,7 +138,7 @@ export function DashboardView({
             </Select>
           </div>
           <div className="flex w-full flex-col sm:w-auto sm:flex-row gap-2">
-            {session ? (
+            {user ? (
               <Button
                 onClick={() => setIsSaveModalOpen(true)}
                 variant="outline"

@@ -14,10 +14,10 @@ import {
   Workspace 
 } from "@/lib/api";
 import { Loader2, Database, Trash2, ArrowRight } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/auth-context";
 
 export default function AnalyzePage() {
-  const { data: session } = useSession();
+  const { user } = useAuth();
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,10 +28,10 @@ export default function AnalyzePage() {
   const [loadingWorkspaceId, setLoadingWorkspaceId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (session) {
+    if (user) {
       fetchWorkspaces();
     }
-  }, [session]);
+  }, [user]);
 
   async function fetchWorkspaces() {
     setLoadingWorkspaces(true);
@@ -131,7 +131,7 @@ export default function AnalyzePage() {
         )}
       </Button>
 
-      {session && (
+      {user && (
         <div className="mt-12 border-t border-[var(--border)] pt-8">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-[var(--foreground)]">
             <Database className="h-5 w-5 text-[var(--primary)]" />

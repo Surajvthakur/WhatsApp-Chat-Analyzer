@@ -37,6 +37,12 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+  const getAuthHeaders = (): Record<string, string> => {
+    if (typeof window === "undefined") return {};
+    const token = localStorage.getItem("auth_token");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   // Sample prompt suggestions
   const suggestions = [
     { text: "Summarize this WhatsApp chat", icon: FileText },
@@ -55,6 +61,7 @@ export default function ChatPage({ params }: ChatPageProps) {
         // 1. Initialize FastAPI RAM session
         const res = await fetch(`${baseUrl}/api/v1/ai/${chatId}/init`, {
           method: "POST",
+          headers: getAuthHeaders(),
         });
         if (!res.ok) {
           throw new Error("Failed to initialize AI session");
@@ -106,6 +113,7 @@ export default function ChatPage({ params }: ChatPageProps) {
       // Close session on unmount
       fetch(`${baseUrl}/api/v1/ai/${chatId}/close`, {
         method: "DELETE",
+        headers: getAuthHeaders(),
         keepalive: true,
       }).catch((err) => console.error("Failed to close AI session", err));
     };
@@ -116,6 +124,7 @@ export default function ChatPage({ params }: ChatPageProps) {
     const handleBeforeUnload = () => {
       fetch(`${baseUrl}/api/v1/ai/${chatId}/close`, {
         method: "DELETE",
+        headers: getAuthHeaders(),
         keepalive: true,
       });
     };
@@ -150,6 +159,7 @@ export default function ChatPage({ params }: ChatPageProps) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ question: userMessage }),
       });

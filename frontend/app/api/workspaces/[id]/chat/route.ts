@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { verifyAuth } from "@/lib/auth-verify";
 import { prisma } from "@/lib/prisma";
 
 interface Context {
@@ -8,14 +8,13 @@ interface Context {
 
 export async function GET(req: NextRequest, { params }: Context) {
   try {
-    const session = await auth();
-    if (!session || !session.user || !session.user.id) {
+    const user = await verifyAuth(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { id } = await params;
 
-    // 1. Fetch workspace from database and check ownership
     const workspace = await prisma.workspace.findUnique({
       where: { id },
     });
@@ -24,40 +23,33 @@ export async function GET(req: NextRequest, { params }: Context) {
       return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
     }
 
-    if (workspace.userId !== session.user.id) {
+    if (workspace.userId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // 2. Retrieve all messages sorted by date ascending
     const messages = await prisma.message.findMany({
       where: { workspaceId: id },
       orderBy: { createdAt: "asc" },
-      select: {
-        role: true,
-        content: true,
-      },
+      select: { role: true, content: true },
     });
 
     return NextResponse.json({ status: "success", messages });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching chat history:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to retrieve chat history" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Failed to retrieve chat history";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest, { params }: Context) {
   try {
-    const session = await auth();
-    if (!session || !session.user || !session.user.id) {
+    const user = await verifyAuth(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { id } = await params;
 
-    // 1. Fetch workspace and verify ownership
     const workspace = await prisma.workspace.findUnique({
       where: { id },
     });
@@ -66,11 +58,10 @@ export async function POST(req: NextRequest, { params }: Context) {
       return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
     }
 
-    if (workspace.userId !== session.user.id) {
+    if (workspace.userId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // 2. Parse and validate new message fields
     const body = await req.json();
     const { role, content } = body;
 
@@ -88,21 +79,14 @@ export async function POST(req: NextRequest, { params }: Context) {
       );
     }
 
-    // 3. Create persistent message in PostgreSQL
-    const message = await prisma.message.create({
-      data: {
-        workspaceId: id,
-        role,
-        content,
-      },
+    const chatMessage = await prisma.message.create({
+      data: { workspaceId: id, role, content },
     });
 
-    return NextResponse.json({ status: "success", message });
-  } catch (error: any) {
+    return NextResponse.json({ status: "success", message: chatMessage });
+  } catch (error: unknown) {
     console.error("Error saving chat message:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to save message" },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Failed to save message";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
