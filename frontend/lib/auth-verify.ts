@@ -13,10 +13,24 @@ interface JwtUser {
  * Returns the decoded user payload or null if invalid.
  */
 export async function verifyAuth(req: NextRequest): Promise<JwtUser | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
+  let token: string | undefined;
 
-  const token = authHeader.slice(7);
+  // 1. Check Authorization header
+  const authHeader = req.headers.get("Authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  }
+
+  // 2. Check token query parameter
+  if (!token) {
+    token = req.nextUrl.searchParams.get("token") || undefined;
+  }
+
+  // 3. Check auth_token cookie
+  if (!token) {
+    token = req.cookies.get("auth_token")?.value;
+  }
+
   if (!token) return null;
 
   try {

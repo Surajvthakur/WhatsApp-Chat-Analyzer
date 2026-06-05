@@ -186,10 +186,14 @@ export function getEmoji(chatId: string, user: string) {
 const WORDCLOUD_CACHE_VERSION = "3";
 
 export function getWordCloudUrl(chatId: string, user: string): string {
+  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
   const params = new URLSearchParams({
     user,
     v: WORDCLOUD_CACHE_VERSION,
   });
+  if (token) {
+    params.append("token", token);
+  }
   return `${API_BASE}/api/v1/chats/${chatId}/words/cloud?${params.toString()}`;
 }
 
