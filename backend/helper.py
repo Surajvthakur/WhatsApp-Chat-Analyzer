@@ -42,27 +42,30 @@ _WORDCLOUD_COLORS = [
 
 _stop_words_cache: set[str] | None = None
 
-def fetch_stats(selected_user,df):
-
+def fetch_stats(selected_user, df):
     if selected_user != 'Overall':
-
         df = df[df['user'] == selected_user]
-        # 1. fetch no of messages
+
+    # 1. fetch no of messages
     num_messages = df.shape[0]
-    # 2. number of words
-    words = []
-    for message in df['message']:
-        words.extend(message.split())
 
-    # fetch number of media messages
-    num_media_messages = df[df['message']=='<Media omitted>'].shape[0]
+    # 2. number of words (vectorized pandas operation)
+    word_count = int(df['message'].fillna('').str.split().str.len().sum())
 
-    # fetch number of links shared
-    links = []
-    for message in df['message']:
-        links.extend(extract.find_urls(message))
+    # 3. fetch number of media messages
+    num_media_messages = df[df['message'] == '<Media omitted>'].shape[0]
 
-    return num_messages,len(words),num_media_messages,len(links)
+    # 4. fetch number of links shared (optimized URL extract using pre-filter and unique message counts)
+    url_like = df['message'].str.contains(r'[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', regex=True, na=False)
+    filtered_messages = df.loc[url_like, 'message']
+    
+    val_counts = filtered_messages.value_counts()
+    num_links = 0
+    for message, count in val_counts.items():
+        urls = extract.find_urls(message)
+        num_links += len(urls) * count
+
+    return num_messages, word_count, num_media_messages, num_links
 
 
 def most_busy_users(df):
