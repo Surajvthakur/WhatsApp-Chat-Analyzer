@@ -7,9 +7,9 @@ import re
 def preprocess(chat_data):
     # Regex pattern to match Android and iOS date formats (AM/PM, 24-hour, iOS with seconds)
     date_pattern = r"""
-        (\d{2}/\d{2}/\d{2},\s?\d{1,2}:\d{2}:\d{2}\s?[apAP][mM])  # iOS format with seconds
-        |(\d{2}/\d{2}/\d{2},\s?\d{1,2}:\d{2}\s?[apAP][mM])       # Android format with AM/PM
-        |(\d{2}/\d{2}/\d{2},\s?\d{1,2}:\d{2})                    # Android 24-hour format
+    (\d{2}/\d{2}/(?:\d{2}|\d{4}),\s?\d{1,2}:\d{2}:\d{2}\s?[apAP][mM])  # iOS format with seconds
+    |(\d{2}/\d{2}/(?:\d{2}|\d{4}),\s?\d{1,2}:\d{2}\s?[apAP][mM])       # Android format with AM/PM
+    |(\d{2}/\d{2}/(?:\d{2}|\d{4}),\s?\d{1,2}:\d{2})                    # Android 24-hour format
     """
 
     def clean_date(raw_date):
