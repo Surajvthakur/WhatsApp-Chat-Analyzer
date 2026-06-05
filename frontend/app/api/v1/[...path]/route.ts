@@ -19,7 +19,13 @@ async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ pa
   
   const targetUrl = `${BACKEND_URL}/api/v1/${pathStr}${url.search}`;
 
-  const token = req.headers.get("Authorization")?.slice(7) || "";
+  let token = req.headers.get("Authorization")?.slice(7) || "";
+  if (!token) {
+    token = req.nextUrl.searchParams.get("token") || "";
+  }
+  if (!token) {
+    token = req.cookies.get("auth_token")?.value || "";
+  }
 
   const headers = new Headers();
   

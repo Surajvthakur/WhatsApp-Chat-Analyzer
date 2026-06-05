@@ -30,25 +30,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if path in PUBLIC_PATHS or path.startswith("/docs"):
             return await call_next(request)
             
-        # 3. Read Authorization header
+        # 3. Read Authorization header or token query parameter
         auth_header = request.headers.get("Authorization")
-        if not auth_header:
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Missing Authorization header"}
-            )
-            
-        if not auth_header.startswith("Bearer "):
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Invalid Authorization header format"}
-            )
-            
-        token = auth_header[7:]
+        token = None
+        if auth_header:
+            if not auth_header.startswith("Bearer "):
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Invalid Authorization header format"}
+                )
+            token = auth_header[7:]
+        else:
+            token = request.query_params.get("token")
+
         if not token:
             return JSONResponse(
                 status_code=401,
-                content={"detail": "Token is missing from Authorization header"}
+                content={"detail": "Missing Authorization header or token query parameter"}
             )
             
         # 4. Verify HS256 JWT
