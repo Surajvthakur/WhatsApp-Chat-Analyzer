@@ -49,24 +49,47 @@ def _get_df(chat_id: str):
         if settings.database_url:
             try:
                 import psycopg2
-                logger.info(f"Cache miss for session {chat_id}. Attempting to auto-load workspace from database...")
+                import pandas as pd
+                logger.info(f"Cache miss for session {chat_id}. Attempting to auto-load workspace messages from database...")
                 conn = psycopg2.connect(settings.database_url)
                 try:
                     with conn.cursor() as cur:
-                        cur.execute('SELECT "chatData" FROM "Workspace" WHERE "id" = %s', (chat_id,))
-                        row = cur.fetchone()
-                        if row:
-                            raw_text = row[0]
-                            logger.info(f"Workspace found in database. Preprocessing raw chat text...")
-                            df = preprocessor.preprocess(raw_text)
-                            if not df.empty:
-                                store.create(df, raw_text=raw_text)
-                                # Override the created random UUID to match workspace/chat_id
-                                last_key = list(store._sessions.keys())[-1]
-                                store._sessions[chat_id] = store._sessions.pop(last_key)
-                                store._sessions[chat_id].chat_id = chat_id
-                                logger.info(f"Successfully auto-hydrated session cache for {chat_id}")
-                                return df
+                        cur.execute(
+                            'SELECT "date", "user", "message" FROM "ChatMessage" WHERE "workspaceId" = %s ORDER BY "date" ASC',
+                            (chat_id,)
+                        )
+                        rows = cur.fetchall()
+                        if rows:
+                            logger.info(f"Workspace messages found in database. Constructing DataFrame...")
+                            df = pd.DataFrame(rows, columns=["date", "user", "message"])
+                            df["date"] = pd.to_datetime(df["date"])
+
+                            # Add derived columns
+                            df['year'] = df['date'].dt.year
+                            df['month'] = df['date'].dt.month
+                            df['day'] = df['date'].dt.day
+                            df['hour'] = df['date'].dt.hour
+                            df['minute'] = df['date'].dt.minute
+                            df['only_date'] = df['date'].dt.date
+                            df['month_num'] = df['date'].dt.month
+                            df['day_name'] = df['date'].dt.day_name()
+
+                            h = df['hour']
+                            h_next = h + 1
+                            h_str = h.astype(str).where(h != 0, '00')
+                            h_next_str = h_next.astype(str).where(h != 23, '00')
+                            df['period'] = h_str + '-' + h_next_str
+
+                            # Populate into RAM store
+                            store.create(df, raw_text="")
+                            
+                            # Override the created random UUID to match workspace/chat_id
+                            last_key = list(store._sessions.keys())[-1]
+                            store._sessions[chat_id] = store._sessions.pop(last_key)
+                            store._sessions[chat_id].chat_id = chat_id
+                            
+                            logger.info(f"Successfully auto-hydrated session cache for {chat_id} with {len(df)} messages.")
+                            return df
                 finally:
                     conn.close()
             except Exception as e:
