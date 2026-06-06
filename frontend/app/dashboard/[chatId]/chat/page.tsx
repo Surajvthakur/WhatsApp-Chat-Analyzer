@@ -7,7 +7,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { 
   getChatHistory, 
   addChatMessage, 
-  ChatMessage 
+  ChatMessage,
+  saveWorkspace 
 } from "@/lib/api";
 import { 
   Send, 
@@ -18,8 +19,11 @@ import {
   MessageSquare, 
   FileText,
   Clock,
-  Info
+  Info,
+  Save,
+  LogIn
 } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 
 interface ChatPageProps {
   params: Promise<{ chatId: string }>;
@@ -27,14 +31,23 @@ interface ChatPageProps {
 
 export default function ChatPage({ params }: ChatPageProps) {
   const { chatId } = use(params);
+  const { user, isLoading: authLoading } = useAuth();
+  const [workspaceState, setWorkspaceState] = useState<"checking" | "saved" | "unsaved" | "unauthorized">("checking");
   const [isInitializing, setIsInitializing] = useState(true);
+  const [loadingStep, setLoadingStep] = useState<"checking" | "loading" | "generating" | "ready">("checking");
   const [initError, setInitError] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSavedWorkspace, setIsSavedWorkspace] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Workspace saving state (used if workspaceState === "unsaved")
+  const [workspaceName, setWorkspaceName] = useState("WhatsApp Chat Analysis");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const getAuthHeaders = (): Record<string, string> => {
@@ -51,14 +64,79 @@ export default function ChatPage({ params }: ChatPageProps) {
     { text: "What are the main topics of conversation?", icon: MessageSquare },
   ];
 
-  // Initialize session when page mounts
+  // 1. Verify if workspace is saved in the database
   useEffect(() => {
+    let active = true;
+    if (authLoading) return;
+
+    if (!user) {
+      setWorkspaceState("unauthorized");
+      return;
+    }
+
+    const checkWorkspaceStatus = async () => {
+      try {
+        const res = await fetch(`/api/workspaces/${chatId}`, {
+          headers: getAuthHeaders(),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (active) {
+            if (data.saved) {
+              setWorkspaceState("saved");
+            } else {
+              setWorkspaceState("unsaved");
+            }
+          }
+        } else {
+          if (active) setWorkspaceState("unsaved");
+        }
+      } catch (err) {
+        console.error("Failed to check workspace saved status", err);
+        if (active) setWorkspaceState("unsaved");
+      }
+    };
+
+    checkWorkspaceStatus();
+
+    return () => {
+      active = false;
+    };
+  }, [chatId, user, authLoading]);
+
+  // 2. Initialize session ONLY when workspace is confirmed to be saved
+  useEffect(() => {
+    if (workspaceState !== "saved") return;
+
     let active = true;
     const initSession = async () => {
       setIsInitializing(true);
       setInitError("");
+      setLoadingStep("checking");
       try {
-        // 1. Initialize FastAPI RAM session
+        // Step 1: Check if embeddings exist in database (Qdrant)
+        let hasEmbeddings = false;
+        try {
+          const statusRes = await fetch(`${baseUrl}/api/v1/ai/${chatId}/status`, {
+            headers: getAuthHeaders(),
+          });
+          if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            hasEmbeddings = !!statusData.exists;
+          }
+        } catch (statusErr) {
+          console.warn("Failed to check embedding status, defaulting to generate", statusErr);
+        }
+
+        if (active) {
+          if (hasEmbeddings) {
+            setLoadingStep("loading");
+          } else {
+            setLoadingStep("generating");
+          }
+        }
+
+        // Step 2: Initialize FastAPI RAM session & generate/load embeddings
         const res = await fetch(`${baseUrl}/api/v1/ai/${chatId}/init`, {
           method: "POST",
           headers: getAuthHeaders(),
@@ -67,7 +145,7 @@ export default function ChatPage({ params }: ChatPageProps) {
           throw new Error("Failed to initialize AI session");
         }
         
-        // 2. Fetch persistent message history from database
+        // 3. Fetch persistent message history from database
         try {
           const dbMessages = await getChatHistory(chatId);
           if (active) {
@@ -84,7 +162,6 @@ export default function ChatPage({ params }: ChatPageProps) {
             }
           }
         } catch (dbErr) {
-          // If history fetch fails with 404, it means it is a temporary/draft workspace
           if (active) {
             setIsSavedWorkspace(false);
             setMessages([
@@ -94,6 +171,9 @@ export default function ChatPage({ params }: ChatPageProps) {
               },
             ]);
           }
+        }
+        if (active) {
+          setLoadingStep("ready");
         }
       } catch (err: any) {
         if (active) {
@@ -110,29 +190,10 @@ export default function ChatPage({ params }: ChatPageProps) {
 
     return () => {
       active = false;
-      // Close session on unmount
-      fetch(`${baseUrl}/api/v1/ai/${chatId}/close`, {
-        method: "DELETE",
-        headers: getAuthHeaders(),
-        keepalive: true,
-      }).catch((err) => console.error("Failed to close AI session", err));
     };
-  }, [chatId, baseUrl]);
+  }, [chatId, baseUrl, workspaceState]);
 
-  // Handle unload (tab close)
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      fetch(`${baseUrl}/api/v1/ai/${chatId}/close`, {
-        method: "DELETE",
-        headers: getAuthHeaders(),
-        keepalive: true,
-      });
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, [chatId, baseUrl]);
+
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -206,6 +267,128 @@ export default function ChatPage({ params }: ChatPageProps) {
     handleSubmit(text);
   };
 
+  if (authLoading || workspaceState === "checking") {
+    return (
+      <div className="flex h-[calc(100vh-8rem)] flex-col items-center justify-center text-center p-8 bg-[var(--card)] rounded-2xl border border-[var(--border)] shadow-md animate-in fade-in duration-200">
+        <Loader2 className="h-10 w-10 animate-spin text-[var(--primary)] mb-4" />
+        <p className="text-lg font-bold text-[var(--foreground)]">Verifying Workspace Status...</p>
+        <p className="text-sm text-[var(--muted-foreground)] mt-2">Please wait while we verify if your workspace is saved.</p>
+      </div>
+    );
+  }
+
+  if (workspaceState === "unauthorized") {
+    return (
+      <div className="flex h-[calc(100vh-8rem)] flex-col items-center justify-center text-center p-8 bg-[var(--card)] rounded-2xl border border-[var(--border)] shadow-md animate-in fade-in duration-200">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-500/10 text-red-500 mb-4">
+          <LogIn className="h-6 w-6" />
+        </div>
+        <h2 className="text-xl font-bold text-[var(--foreground)]">Authentication Required</h2>
+        <p className="text-sm text-[var(--muted-foreground)] mt-2 max-w-md">
+          You must be logged in to save your workspace and access the Ask AI Chat Assistant.
+        </p>
+        <Button 
+          onClick={() => window.location.href = `/login?callbackUrl=/dashboard/${chatId}/chat`}
+          className="mt-6 flex items-center gap-2 rounded-xl"
+        >
+          <LogIn className="h-4 w-4" />
+          Log In / Sign Up
+        </Button>
+      </div>
+    );
+  }
+
+  if (workspaceState === "unsaved") {
+    return (
+      <div className="flex h-[calc(100vh-8rem)] flex-col items-center justify-center p-6 bg-[var(--card)] rounded-2xl border border-[var(--border)] shadow-md animate-in fade-in duration-200">
+        <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 shadow-xl">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--primary)]/10 text-[var(--primary)] mb-4">
+            <Save className="h-6 w-6" />
+          </div>
+          <h3 className="text-xl font-bold text-[var(--foreground)]">Save Workspace</h3>
+          <p className="mt-2 text-sm text-[var(--muted-foreground)] leading-relaxed">
+            Before you can ask AI questions about this WhatsApp chat, you must first save it to your account. This compiles statistics and sets up the vector search database.
+          </p>
+          
+          <div className="mt-6">
+            <label htmlFor="workspace-name-input" className="block text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-2">
+              Workspace Name
+            </label>
+            <input
+              id="workspace-name-input"
+              type="text"
+              value={workspaceName}
+              onChange={(e) => setWorkspaceName(e.target.value)}
+              className="w-full rounded-xl border border-[var(--border)] bg-transparent px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-all"
+              placeholder="e.g. Chat with Friends"
+              disabled={isSaving || saveSuccess}
+            />
+          </div>
+           
+          {saveError && (
+            <p className="mt-3 text-sm text-red-500 font-medium">
+              {saveError}
+            </p>
+          )}
+          
+          {saveSuccess && (
+            <p className="mt-3 text-sm text-[var(--primary)] font-medium flex items-center gap-1.5">
+              <span>✓ Workspace saved successfully! Initializing AI session...</span>
+            </p>
+          )}
+          
+          <div className="mt-8 flex justify-end gap-3">
+            <Button
+              variant="outline"
+               onClick={() => {
+                 window.location.href = `/dashboard/${chatId}`;
+               }}
+              disabled={isSaving || saveSuccess}
+              className="rounded-xl px-5"
+            >
+              Go Back
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!workspaceName.trim()) {
+                  setSaveError("Workspace name cannot be empty.");
+                  return;
+                }
+                setIsSaving(true);
+                setSaveError(null);
+                try {
+                  const response = await saveWorkspace(chatId, workspaceName);
+                  setSaveSuccess(true);
+                  setTimeout(() => {
+                    window.location.href = `/dashboard/${response.workspace.id}/chat`;
+                  }, 1500);
+                } catch (err: any) {
+                  setSaveError(err.message || "Failed to save workspace.");
+                } finally {
+                  setIsSaving(false);
+                }
+              }}
+              disabled={isSaving || saveSuccess}
+              className="flex items-center gap-2 rounded-xl px-5"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  Save & Continue
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-md overflow-hidden animate-in fade-in duration-300">
       {/* Chat Header */}
@@ -228,9 +411,15 @@ export default function ChatPage({ params }: ChatPageProps) {
         {isInitializing ? (
           <div className="flex h-full flex-col items-center justify-center text-center p-8">
             <Loader2 className="h-10 w-10 animate-spin text-[var(--primary)] mb-4" />
-            <p className="text-lg font-bold text-[var(--foreground)]">Initializing AI Engine...</p>
+            <p className="text-lg font-bold text-[var(--foreground)]">
+              {loadingStep === "checking" && "Checking database for existing embeddings..."}
+              {loadingStep === "loading" && "Loading embeddings from database..."}
+              {loadingStep === "generating" && "Generating AI embeddings..."}
+            </p>
             <p className="text-sm text-[var(--muted-foreground)] mt-2 max-w-md leading-relaxed">
-              We are compiling and indexing your conversation data to enable high-speed AI retrieval. This will take only a brief moment...
+              {loadingStep === "checking" && "We are checking Qdrant for previously indexed vectors of this chat..."}
+              {loadingStep === "loading" && "Embeddings already exist! Fast-loading conversation vectors..."}
+              {loadingStep === "generating" && "Embeddings are not present in database. Processing chat data and generating new vectors using Ollama (this will take a few moments)..."}
             </p>
           </div>
         ) : initError ? (
@@ -243,13 +432,7 @@ export default function ChatPage({ params }: ChatPageProps) {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Draft Notification Banner */}
-            {!isSavedWorkspace && (
-              <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 text-xs text-amber-600 font-semibold mb-4 mx-auto max-w-xl justify-center animate-in slide-in-from-top duration-300">
-                <Info className="h-4 w-4 shrink-0 text-amber-500" />
-                <span>Draft Session: Click "Save Workspace" on the Analytics page to keep this chat history persistently.</span>
-              </div>
-            )}
+
 
             {messages.map((msg, idx) => (
               <div

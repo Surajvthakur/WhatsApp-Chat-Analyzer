@@ -40,11 +40,41 @@ router = APIRouter(prefix="/api/v1/chats", tags=["analysis"])
 store = SessionStore(ttl_seconds=settings.session_ttl_seconds)
 
 
+import logging
+logger = logging.getLogger(__name__)
+
 def _get_df(chat_id: str):
     df = store.get(chat_id)
     if df is None:
+        if settings.database_url:
+            try:
+                import psycopg2
+                logger.info(f"Cache miss for session {chat_id}. Attempting to auto-load workspace from database...")
+                conn = psycopg2.connect(settings.database_url)
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute('SELECT "chatData" FROM "Workspace" WHERE "id" = %s', (chat_id,))
+                        row = cur.fetchone()
+                        if row:
+                            raw_text = row[0]
+                            logger.info(f"Workspace found in database. Preprocessing raw chat text...")
+                            df = preprocessor.preprocess(raw_text)
+                            if not df.empty:
+                                store.create(df, raw_text=raw_text)
+                                # Override the created random UUID to match workspace/chat_id
+                                last_key = list(store._sessions.keys())[-1]
+                                store._sessions[chat_id] = store._sessions.pop(last_key)
+                                store._sessions[chat_id].chat_id = chat_id
+                                logger.info(f"Successfully auto-hydrated session cache for {chat_id}")
+                                return df
+                finally:
+                    conn.close()
+            except Exception as e:
+                logger.error(f"Failed to auto-load workspace {chat_id} from database: {e}", exc_info=True)
+                
         raise HTTPException(status_code=404, detail="Chat session not found or expired")
     return df
+
 
 
 @router.post("", response_model=ChatUploadResponse)

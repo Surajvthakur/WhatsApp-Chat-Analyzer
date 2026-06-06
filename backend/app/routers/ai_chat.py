@@ -2,8 +2,18 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.routers.analysis import _get_df
 from app.ai.rag_pipeline import ingest_chat, query_chat, delete_session
+from app.ai.qdrant_store import has_embeddings
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
+
+@router.get("/{chat_id}/status")
+def get_ai_session_status(chat_id: str):
+    """
+    Checks if embeddings exist in Qdrant for the given chat_id.
+    """
+    exists = has_embeddings(chat_id)
+    return {"status": "success", "exists": exists}
+
 
 class QueryRequest(BaseModel):
     question: str
