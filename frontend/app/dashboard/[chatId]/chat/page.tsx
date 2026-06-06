@@ -1,6 +1,5 @@
 "use client";
 
-import { use } from "react";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,13 +23,10 @@ import {
   LogIn
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useWorkspaceStore } from "@/lib/workspace-store";
 
-interface ChatPageProps {
-  params: Promise<{ chatId: string }>;
-}
-
-export default function ChatPage({ params }: ChatPageProps) {
-  const { chatId } = use(params);
+export default function ChatPage() {
+  const { chatId } = useWorkspaceStore();
   const { user, isLoading: authLoading } = useAuth();
   const [workspaceState, setWorkspaceState] = useState<"checking" | "saved" | "unsaved" | "unauthorized">("checking");
   const [isInitializing, setIsInitializing] = useState(true);

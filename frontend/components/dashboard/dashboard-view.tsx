@@ -27,18 +27,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Bot, Save, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useWorkspaceStore } from "@/lib/workspace-store";
 
-interface DashboardViewProps {
-  chatId: string;
-  selectedUser: string;
-  onUserChange: (user: string) => void;
-}
-
-export function DashboardView({
-  chatId,
-  selectedUser,
-  onUserChange,
-}: DashboardViewProps) {
+export function DashboardView() {
+  const { chatId, selectedUser, setSelectedUser } = useWorkspaceStore();
   const { user } = useAuth();
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("WhatsApp Chat Analysis");
@@ -128,7 +120,7 @@ export function DashboardView({
             <Select
               id="user-select"
               value={selectedUser}
-              onChange={(e) => onUserChange(e.target.value)}
+              onChange={(e) => setSelectedUser(e.target.value)}
             >
               {users.map((u) => (
                 <option key={u} value={u}>
@@ -253,7 +245,7 @@ export function DashboardView({
 
       <section>
         <h2 className="mb-4 text-lg font-semibold">Top Statistics</h2>
-        <StatCards chatId={chatId} user={selectedUser} />
+        <StatCards />
       </section>
 
       <ChartShell

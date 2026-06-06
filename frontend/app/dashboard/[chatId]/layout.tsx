@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
@@ -12,6 +12,7 @@ import {
   MessageCircle
 } from "lucide-react";
 import { useState } from "react";
+import { useWorkspaceStore } from "@/lib/workspace-store";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -25,6 +26,11 @@ export default function DashboardLayout({
   const { chatId } = use(params);
   const pathname = usePathname();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const setChatId = useWorkspaceStore((s) => s.setChatId);
+
+  useEffect(() => {
+    setChatId(chatId);
+  }, [chatId, setChatId]);
 
   const links = [
     {
