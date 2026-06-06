@@ -53,6 +53,31 @@ def ingest_chat(session_id: str, df: pd.DataFrame) -> bool:
     return success
 
 
+def get_recent_chat_history(workspace_id: str, limit: int = 10) -> list:
+    """
+    Retrieves the most recent messages for the given workspace_id from PostgreSQL.
+    Returns a list of dicts with 'role' and 'content', ordered chronologically (oldest first).
+    """
+    if not settings.database_url:
+        logger.error("Database URL is not configured. Cannot fetch chat history.")
+        raise ValueError("Database URL is not configured.")
+
+    import psycopg2
+
+    conn = psycopg2.connect(settings.database_url)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "role", "content" FROM "Message" WHERE "workspaceId" = %s ORDER BY "createdAt" DESC LIMIT %s',
+                (workspace_id, limit),
+            )
+            rows = cur.fetchall()
+            messages = [{"role": row[0], "content": row[1]} for row in reversed(rows)]
+            return messages
+    finally:
+        conn.close()
+
+
 def query_chat(session_id: str, question: str) -> str:
     """
     Embeds the question, retrieves the most relevant chunks from Qdrant,
@@ -78,28 +103,61 @@ def query_chat(session_id: str, question: str) -> str:
     try:
         client = Groq(api_key=settings.groq_api_key)
 
+        # Retrieve chat history
+        chat_history = get_recent_chat_history(session_id, limit=10)
+
+        # Exclude current question if it was already saved asynchronously by frontend
+        if chat_history and chat_history[-1]["role"] == "user" and chat_history[-1]["content"] == question:
+            chat_history.pop()
+
+        chat_history = chat_history[-10:]  # Ensure we have at most 10 messages (5 turns)
+
+        history_context = ""
+        if chat_history:
+            history_lines = []
+            for msg in chat_history:
+                role_label = "User" if msg["role"] == "user" else "Assistant"
+                history_lines.append(f"{role_label}: {msg['content']}")
+            history_context = "\n".join(history_lines)
+
         prompt = f"""You are a helpful AI assistant analyzing a WhatsApp chat export.
 Answer the user's question based ONLY on the provided chat context. If the answer is not in the context, say so. Do not invent information.
 
 CONTEXT:
 {context}
+"""
 
+        if history_context:
+            prompt += f"\nRECENT CHAT HISTORY:\n{history_context}\n"
+
+        prompt += f"""
 QUESTION:
 {question}
 """
 
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant analyzing WhatsApp chat logs.",
+            }
+        ]
+
+        # Inject structural chat history
+        for msg in chat_history:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+
+        # Inject the current query prompt
+        messages.append({
+            "role": "user",
+            "content": prompt
+        })
+
         completion = client.chat.completions.create(
             model=settings.groq_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a helpful assistant analyzing WhatsApp chat logs.",
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
+            messages=messages,
             temperature=0.2,
             max_tokens=1024,
         )
