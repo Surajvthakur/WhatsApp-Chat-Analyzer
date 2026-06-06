@@ -28,6 +28,7 @@ interface ChatPageProps {
 export default function ChatPage({ params }: ChatPageProps) {
   const { chatId } = use(params);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [loadingStep, setLoadingStep] = useState<"checking" | "loading" | "generating" | "ready">("checking");
   const [initError, setInitError] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -57,8 +58,31 @@ export default function ChatPage({ params }: ChatPageProps) {
     const initSession = async () => {
       setIsInitializing(true);
       setInitError("");
+      setLoadingStep("checking");
       try {
-        // 1. Initialize FastAPI RAM session
+        // Step 1: Check if embeddings exist in database (Qdrant)
+        let hasEmbeddings = false;
+        try {
+          const statusRes = await fetch(`${baseUrl}/api/v1/ai/${chatId}/status`, {
+            headers: getAuthHeaders(),
+          });
+          if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            hasEmbeddings = !!statusData.exists;
+          }
+        } catch (statusErr) {
+          console.warn("Failed to check embedding status, defaulting to generate", statusErr);
+        }
+
+        if (active) {
+          if (hasEmbeddings) {
+            setLoadingStep("loading");
+          } else {
+            setLoadingStep("generating");
+          }
+        }
+
+        // Step 2: Initialize FastAPI RAM session & generate/load embeddings
         const res = await fetch(`${baseUrl}/api/v1/ai/${chatId}/init`, {
           method: "POST",
           headers: getAuthHeaders(),
@@ -67,7 +91,7 @@ export default function ChatPage({ params }: ChatPageProps) {
           throw new Error("Failed to initialize AI session");
         }
         
-        // 2. Fetch persistent message history from database
+        // 3. Fetch persistent message history from database
         try {
           const dbMessages = await getChatHistory(chatId);
           if (active) {
@@ -95,6 +119,9 @@ export default function ChatPage({ params }: ChatPageProps) {
             ]);
           }
         }
+        if (active) {
+          setLoadingStep("ready");
+        }
       } catch (err: any) {
         if (active) {
           setInitError(err.message || "Something went wrong.");
@@ -110,29 +137,10 @@ export default function ChatPage({ params }: ChatPageProps) {
 
     return () => {
       active = false;
-      // Close session on unmount
-      fetch(`${baseUrl}/api/v1/ai/${chatId}/close`, {
-        method: "DELETE",
-        headers: getAuthHeaders(),
-        keepalive: true,
-      }).catch((err) => console.error("Failed to close AI session", err));
+      // Embeddings are no longer deleted on unmount to keep them persistently in Qdrant
     };
   }, [chatId, baseUrl]);
 
-  // Handle unload (tab close)
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      fetch(`${baseUrl}/api/v1/ai/${chatId}/close`, {
-        method: "DELETE",
-        headers: getAuthHeaders(),
-        keepalive: true,
-      });
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, [chatId, baseUrl]);
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -228,9 +236,15 @@ export default function ChatPage({ params }: ChatPageProps) {
         {isInitializing ? (
           <div className="flex h-full flex-col items-center justify-center text-center p-8">
             <Loader2 className="h-10 w-10 animate-spin text-[var(--primary)] mb-4" />
-            <p className="text-lg font-bold text-[var(--foreground)]">Initializing AI Engine...</p>
+            <p className="text-lg font-bold text-[var(--foreground)]">
+              {loadingStep === "checking" && "Checking database for existing embeddings..."}
+              {loadingStep === "loading" && "Loading embeddings from database..."}
+              {loadingStep === "generating" && "Generating AI embeddings..."}
+            </p>
             <p className="text-sm text-[var(--muted-foreground)] mt-2 max-w-md leading-relaxed">
-              We are compiling and indexing your conversation data to enable high-speed AI retrieval. This will take only a brief moment...
+              {loadingStep === "checking" && "We are checking Qdrant for previously indexed vectors of this chat..."}
+              {loadingStep === "loading" && "Embeddings already exist! Fast-loading conversation vectors..."}
+              {loadingStep === "generating" && "Embeddings are not present in database. Processing chat data and generating new vectors using Ollama (this will take a few moments)..."}
             </p>
           </div>
         ) : initError ? (
