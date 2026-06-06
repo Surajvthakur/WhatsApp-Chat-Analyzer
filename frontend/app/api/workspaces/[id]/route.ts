@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/auth-verify";
 import { prisma } from "@/lib/prisma";
 
+
 const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface Context {
@@ -52,3 +53,32 @@ export async function DELETE(req: NextRequest, { params }: Context) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export async function GET(req: NextRequest, { params }: Context) {
+  try {
+    const user = await verifyAuth(req);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+
+    const workspace = await prisma.workspace.findUnique({
+      where: { id },
+    });
+
+    if (!workspace) {
+      return NextResponse.json({ saved: false });
+    }
+
+    if (workspace.userId !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    return NextResponse.json({ saved: true, workspaceName: workspace.workspaceName });
+  } catch (error: unknown) {
+    console.error("Error checking workspace:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
