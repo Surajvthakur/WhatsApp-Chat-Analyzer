@@ -29,12 +29,12 @@ model Otp {
 }
 
 model Workspace {
-  id            String    @id @default(cuid())
+  id            String        @id @default(cuid())
   userId        String
   workspaceName String
-  createdAt     DateTime  @default(now())
-  summary       String?   @db.Text
-  chatData      String    @db.Text
+  createdAt     DateTime      @default(now())
+  summary       String?       @db.Text
+  chatMessages  ChatMessage[]
   messages      Message[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -48,6 +48,18 @@ model Message {
   role        String   // "user" or "assistant"
   content     String   @db.Text
   createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model ChatMessage {
+  id          String   @id @default(cuid())
+  workspaceId String
+  date        DateTime
+  user        String
+  message     String   @db.Text
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 

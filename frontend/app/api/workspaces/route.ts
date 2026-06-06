@@ -26,7 +26,6 @@ export async function POST(req: NextRequest) {
       data: {
         userId: user.id,
         workspaceName,
-        chatData: "",
         summary: "",
       },
     });
@@ -55,24 +54,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await persistResponse.json();
-
-    // 3. Update the PostgreSQL record with the raw chat text and summary
-    const finalWorkspace = await prisma.workspace.update({
-      where: { id: workspace.id },
-      data: {
-        chatData: result.raw_text,
-        summary: result.summary,
-      },
-    });
-
     return NextResponse.json({
       status: "success",
       workspace: {
-        id: finalWorkspace.id,
-        workspaceName: finalWorkspace.workspaceName,
-        createdAt: finalWorkspace.createdAt,
-        summary: finalWorkspace.summary,
+        id: workspace.id,
+        workspaceName: workspace.workspaceName,
+        createdAt: workspace.createdAt,
+        summary: workspace.summary,
       },
     });
   } catch (error: unknown) {
