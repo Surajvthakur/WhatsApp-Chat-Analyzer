@@ -19,6 +19,7 @@ export function StatCards() {
   const { data, isLoading } = useQuery({
     queryKey: ["stats", chatId, selectedUser],
     queryFn: () => getStats(chatId, selectedUser),
+    enabled: !!chatId,
   });
 
   return (

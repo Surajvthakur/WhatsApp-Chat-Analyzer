@@ -41,47 +41,55 @@ export function DashboardView() {
   const { data: users = [] } = useQuery({
     queryKey: ["users", chatId],
     queryFn: () => getUsers(chatId),
+    enabled: !!chatId,
   });
 
   const monthly = useQuery({
     queryKey: ["monthly", chatId, selectedUser],
     queryFn: () => getMonthlyTimeline(chatId, selectedUser),
+    enabled: !!chatId,
   });
 
   const daily = useQuery({
     queryKey: ["daily", chatId, selectedUser],
     queryFn: () => getDailyTimeline(chatId, selectedUser),
+    enabled: !!chatId,
   });
 
   const weekActivity = useQuery({
     queryKey: ["week", chatId, selectedUser],
     queryFn: () => getWeekActivity(chatId, selectedUser),
+    enabled: !!chatId,
   });
 
   const monthActivity = useQuery({
     queryKey: ["month-activity", chatId, selectedUser],
     queryFn: () => getMonthActivity(chatId, selectedUser),
+    enabled: !!chatId,
   });
 
   const heatmap = useQuery({
     queryKey: ["heatmap", chatId, selectedUser],
     queryFn: () => getActivityHeatmap(chatId, selectedUser),
+    enabled: !!chatId,
   });
 
   const busyUsers = useQuery({
     queryKey: ["busy-users", chatId],
     queryFn: () => getBusyUsers(chatId),
-    enabled: selectedUser === "Overall",
+    enabled: !!chatId && selectedUser === "Overall",
   });
 
   const commonWords = useQuery({
     queryKey: ["words", chatId, selectedUser],
     queryFn: () => getCommonWords(chatId, selectedUser),
+    enabled: !!chatId,
   });
 
   const emoji = useQuery({
     queryKey: ["emoji", chatId, selectedUser],
     queryFn: () => getEmoji(chatId, selectedUser),
+    enabled: !!chatId,
   });
 
   const wordCloudUrl = getWordCloudUrl(chatId, selectedUser);
