@@ -5,11 +5,7 @@ import { Link2, MessageSquare, Image, Type } from "lucide-react";
 import { getStats } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-
-interface StatCardsProps {
-  chatId: string;
-  user: string;
-}
+import { useWorkspaceStore } from "@/lib/workspace-store";
 
 const stats = [
   { key: "messages" as const, label: "Total Messages", icon: MessageSquare },
@@ -18,10 +14,11 @@ const stats = [
   { key: "links" as const, label: "Links Shared", icon: Link2 },
 ];
 
-export function StatCards({ chatId, user }: StatCardsProps) {
+export function StatCards() {
+  const { chatId, selectedUser } = useWorkspaceStore();
   const { data, isLoading } = useQuery({
-    queryKey: ["stats", chatId, user],
-    queryFn: () => getStats(chatId, user),
+    queryKey: ["stats", chatId, selectedUser],
+    queryFn: () => getStats(chatId, selectedUser),
   });
 
   return (
