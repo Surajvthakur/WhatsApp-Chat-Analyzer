@@ -17,26 +17,29 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-def ingest_chat(session_id: str, df: pd.DataFrame) -> bool:
+async def ingest_chat(session_id: str, df: pd.DataFrame) -> bool:
     """
     Ensures embeddings exist in Qdrant for the given session.
     If they already exist, returns immediately (cache hit).
-    Otherwise chunks the chat, generates embeddings via Ollama,
-    and persists them to Qdrant.
+    Otherwise chunks the chat, generates embeddings via the configured
+    provider, and persists them to Qdrant.
     """
     # Fast path: embeddings already stored in Qdrant
     if has_embeddings(session_id):
-        logger.info(f"Embeddings already exist in Qdrant for '{session_id}'. Skipping ingestion.")
+        logger.info(
+            "Embeddings already exist in Qdrant for '%s'. Skipping ingestion.",
+            session_id,
+        )
         return True
 
-    logger.info(f"Ingesting chat for session '{session_id}'...")
+    logger.info("Ingesting chat for session '%s'...", session_id)
     chunks = chunk_chat_data(df)
     if not chunks:
-        logger.warning(f"No chunks generated for session '{session_id}'.")
+        logger.warning("No chunks generated for session '%s'.", session_id)
         return False
 
     metadata_list = get_chunks_metadata(df)
-    embeddings = generate_embeddings(chunks)
+    embeddings = await generate_embeddings(chunks)
 
     success = save_embeddings(
         session_id=session_id,
@@ -46,9 +49,13 @@ def ingest_chat(session_id: str, df: pd.DataFrame) -> bool:
     )
 
     if success:
-        logger.info(f"Ingestion complete for '{session_id}'. Stored {len(chunks)} chunks in Qdrant.")
+        logger.info(
+            "Ingestion complete for '%s'. Stored %d chunks in Qdrant.",
+            session_id,
+            len(chunks),
+        )
     else:
-        logger.error(f"Failed to save embeddings to Qdrant for '{session_id}'.")
+        logger.error("Failed to save embeddings to Qdrant for '%s'.", session_id)
 
     return success
 
@@ -78,13 +85,13 @@ def get_recent_chat_history(workspace_id: str, limit: int = 10) -> list:
         conn.close()
 
 
-def query_chat(session_id: str, question: str) -> str:
+async def query_chat(session_id: str, question: str) -> str:
     """
     Embeds the question, retrieves the most relevant chunks from Qdrant,
     and generates an answer using the Groq LLM.
     """
     # 1. Embed the question
-    question_embedding = generate_embeddings([question])[0]
+    question_embedding = (await generate_embeddings([question]))[0]
     if hasattr(question_embedding, "tolist"):
         question_embedding = question_embedding.tolist()
 
@@ -165,7 +172,7 @@ QUESTION:
         return completion.choices[0].message.content
 
     except Exception as e:
-        logger.error(f"Error calling Groq API: {e}")
+        logger.error("Error calling Groq API: %s", e)
         return f"Sorry, there was an error communicating with the AI provider: {str(e)}"
 
 
@@ -175,6 +182,6 @@ def delete_session(session_id: str):
     """
     deleted = delete_workspace_embeddings(session_id)
     if deleted:
-        logger.info(f"Deleted Qdrant vectors for session '{session_id}'.")
+        logger.info("Deleted Qdrant vectors for session '%s'.", session_id)
     else:
-        logger.warning(f"No vectors found or deletion failed for session '{session_id}'.")
+        logger.warning("No vectors found or deletion failed for session '%s'.", session_id)

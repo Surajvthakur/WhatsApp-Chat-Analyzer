@@ -12,10 +12,11 @@ class Settings(BaseSettings):
     auth_secret: str = ""
     database_url: str = ""
     
-    # Ollama integration settings
-    ollama_url: str = "http://localhost:11434"
-    embedding_model: str = "all-minilm"
-    embedding_dimension: int = 384
+    # Embedding provider settings
+    embedding_provider: str = "gemini"
+    gemini_api_key: str = ""
+    gemini_embedding_model: str = "gemini-embedding-2"
+    embedding_dimension: int = 768
 
     # Mail (SMTP) settings for OTP emails
     mail_username: str = ""

@@ -6,6 +6,7 @@ from app.ai.qdrant_store import has_embeddings
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 
+
 @router.get("/{chat_id}/status")
 def get_ai_session_status(chat_id: str):
     """
@@ -18,8 +19,9 @@ def get_ai_session_status(chat_id: str):
 class QueryRequest(BaseModel):
     question: str
 
+
 @router.post("/{chat_id}/init")
-def init_ai_session(chat_id: str):
+async def init_ai_session(chat_id: str):
     """
     Initializes an AI session for the given chat_id by creating embeddings.
     """
@@ -27,20 +29,22 @@ def init_ai_session(chat_id: str):
         df = _get_df(chat_id)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
-        
-    success = ingest_chat(chat_id, df)
+
+    success = await ingest_chat(chat_id, df)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to initialize AI session (no data found).")
-        
+
     return {"status": "success", "message": "AI session initialized successfully."}
 
+
 @router.post("/{chat_id}/query")
-def ask_question(chat_id: str, request: QueryRequest):
+async def ask_question(chat_id: str, request: QueryRequest):
     """
     Asks a question to the initialized AI session.
     """
-    answer = query_chat(chat_id, request.question)
+    answer = await query_chat(chat_id, request.question)
     return {"status": "success", "answer": answer}
+
 
 @router.delete("/{chat_id}/close")
 def close_ai_session(chat_id: str):

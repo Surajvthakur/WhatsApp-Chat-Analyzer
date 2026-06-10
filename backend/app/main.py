@@ -1,5 +1,6 @@
 import os
 import sys
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from app.routers import workspaces
 from app.auth.auth_router import router as auth_router
 from app.middleware.auth import AuthMiddleware
 
+logger = logging.getLogger(__name__)
+
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 os.chdir(BACKEND_ROOT)
 if str(BACKEND_ROOT) not in sys.path:
@@ -21,12 +24,16 @@ if str(BACKEND_ROOT) not in sys.path:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Asynchronously check and pull the Ollama embedding model on startup
-    import asyncio
-    from app.ai.embeddings import ensure_model_exists
-    
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, ensure_model_exists)
+    # Eagerly initialise the embedding provider so misconfiguration
+    # surfaces at startup rather than on the first user request.
+    from app.ai.embeddings import get_embedding_provider
+
+    provider = get_embedding_provider()
+    logger.info(
+        "Embedding provider ready: %s (dim=%d)",
+        settings.embedding_provider,
+        provider.dimension,
+    )
     yield
 
 
