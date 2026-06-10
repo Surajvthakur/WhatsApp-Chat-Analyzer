@@ -138,7 +138,16 @@ export default function ChatPage() {
           headers: getAuthHeaders(),
         });
         if (!res.ok) {
-          throw new Error("Failed to initialize AI session");
+          let errMsg = "Failed to initialize AI session";
+          try {
+            const errData = await res.json();
+            if (errData && errData.detail) {
+              errMsg = errData.detail;
+            }
+          } catch (e) {
+            // ignore JSON parse errors
+          }
+          throw new Error(errMsg);
         }
         
         // 3. Fetch persistent message history from database
@@ -173,7 +182,8 @@ export default function ChatPage() {
         }
       } catch (err: any) {
         if (active) {
-          setInitError(err.message || "Something went wrong.");
+          const errMsg = err.message || "Something went wrong.";
+          setInitError(errMsg);
         }
       } finally {
         if (active) {
@@ -415,16 +425,47 @@ export default function ChatPage() {
             <p className="text-sm text-[var(--muted-foreground)] mt-2 max-w-md leading-relaxed">
               {loadingStep === "checking" && "We are checking Qdrant for previously indexed vectors of this chat..."}
               {loadingStep === "loading" && "Embeddings already exist! Fast-loading conversation vectors..."}
-              {loadingStep === "generating" && "Embeddings are not present in database. Processing chat data and generating new vectors using Ollama (this will take a few moments)..."}
+              {loadingStep === "generating" && "Embeddings are not present in database. Processing chat data and generating new vectors using Gemini API (this may take a few moments)..."}
             </p>
           </div>
         ) : initError ? (
-          <div className="flex h-full flex-col items-center justify-center p-8 text-center">
-            <p className="text-red-500 mb-2 font-bold">Initialization Failed</p>
-            <p className="text-sm text-[var(--muted-foreground)]">{initError}</p>
-            <Button onClick={() => window.location.reload()} className="mt-4">
-              Retry Connection
-            </Button>
+          <div className="flex h-full flex-col items-center justify-center p-8 text-center max-w-lg mx-auto">
+            {initError.toLowerCase().includes("rate limit") || 
+             initError.toLowerCase().includes("quota") || 
+             initError.toLowerCase().includes("429") || 
+             initError.toLowerCase().includes("resource_exhausted") ? (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-8 shadow-xs flex flex-col items-center text-center backdrop-blur-xs">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/20 text-amber-500 mb-6 animate-pulse">
+                  <Clock className="h-7 w-7" />
+                </div>
+                <h3 className="text-xl font-bold text-amber-500 mb-3">Rate Limit Exceeded</h3>
+                <p className="text-sm text-[var(--foreground)] font-medium mb-4 max-w-sm">
+                  {initError}
+                </p>
+                <div className="text-xs text-[var(--muted-foreground)] leading-relaxed bg-[var(--muted)]/50 border border-[var(--border)]/30 rounded-xl p-4 mb-6 text-left">
+                  <span className="font-semibold text-[var(--foreground)] block mb-1">Why am I seeing this?</span>
+                  Gemini free-tier API keys are subject to strict rate limits (typically 15 requests per minute). Processing large WhatsApp exports requires multiple embedding API requests in quick succession, which can trigger this limit.
+                </div>
+                <div className="flex flex-col gap-3 w-full">
+                  <Button onClick={() => window.location.reload()} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold">
+                    Retry Connection
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-8 shadow-xs flex flex-col items-center text-center max-w-md backdrop-blur-xs">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-red-500 mb-6">
+                  <Info className="h-7 w-7" />
+                </div>
+                <h3 className="text-xl font-bold text-red-500 mb-3">Initialization Failed</h3>
+                <p className="text-sm text-[var(--muted-foreground)] mb-6 max-w-sm">
+                  {initError}
+                </p>
+                <Button onClick={() => window.location.reload()} className="w-full font-semibold">
+                  Retry Connection
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-6">

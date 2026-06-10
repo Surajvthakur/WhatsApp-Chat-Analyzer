@@ -42,9 +42,16 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
         Returns a flat list of vectors in the same order as *texts*.
         """
+        import asyncio
         all_vectors: list[list[float]] = []
 
-        for start in range(0, len(texts), _MAX_BATCH_SIZE):
+        for i, start in enumerate(range(0, len(texts), _MAX_BATCH_SIZE)):
+            if i > 0:
+                logger.info(
+                    "Rate limit safety delay: sleeping 4.0s before next batch..."
+                )
+                await asyncio.sleep(4.0)
+
             batch = texts[start : start + _MAX_BATCH_SIZE]
             response = await self._client.aio.models.embed_content(
                 model=self._model,

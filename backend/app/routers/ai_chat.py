@@ -4,6 +4,8 @@ from app.routers.analysis import _get_df
 from app.ai.rag_pipeline import ingest_chat, query_chat, delete_session
 from app.ai.qdrant_store import has_embeddings
 
+from google.genai.errors import APIError
+
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 
 
@@ -30,9 +32,19 @@ async def init_ai_session(chat_id: str):
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    success = await ingest_chat(chat_id, df)
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to initialize AI session (no data found).")
+    try:
+        success = await ingest_chat(chat_id, df)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to initialize AI session (no data found).")
+    except APIError as e:
+        if getattr(e, "code", None) == 429 or getattr(e, "status", None) == "RESOURCE_EXHAUSTED" or "quota" in str(e).lower():
+            raise HTTPException(
+                status_code=429,
+                detail="Gemini API Rate Limit Exceeded. You have exceeded your API quota. Please wait a minute and retry."
+            )
+        raise HTTPException(status_code=500, detail=f"AI Service Error: {e.message or str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
     return {"status": "success", "message": "AI session initialized successfully."}
 
@@ -42,8 +54,18 @@ async def ask_question(chat_id: str, request: QueryRequest):
     """
     Asks a question to the initialized AI session.
     """
-    answer = await query_chat(chat_id, request.question)
-    return {"status": "success", "answer": answer}
+    try:
+        answer = await query_chat(chat_id, request.question)
+        return {"status": "success", "answer": answer}
+    except APIError as e:
+        if getattr(e, "code", None) == 429 or getattr(e, "status", None) == "RESOURCE_EXHAUSTED" or "quota" in str(e).lower():
+            raise HTTPException(
+                status_code=429,
+                detail="Gemini API Rate Limit Exceeded. You have exceeded your API quota. Please wait a minute and retry."
+            )
+        raise HTTPException(status_code=500, detail=f"AI Service Error: {e.message or str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
 @router.delete("/{chat_id}/close")
