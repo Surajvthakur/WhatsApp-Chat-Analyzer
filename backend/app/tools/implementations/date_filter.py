@@ -124,6 +124,16 @@ class DateFilterTool(BaseTool):
             "total_found": total_found,
             "truncated": total_found > limit,
             "limit": limit,
+            "filter_applied": {
+                "start_date": start_date_str,
+                "end_date": end_date_str,
+                "date": date_str,
+                "relative": relative
+            },
+            "found_messages_range": {
+                "min_date": str(filtered_df['date'].min()) if not filtered_df.empty else None,
+                "max_date": str(filtered_df['date'].max()) if not filtered_df.empty else None
+            },
             "date_range": {
                 "start": str(filtered_df['date'].min()) if not filtered_df.empty else None,
                 "end": str(filtered_df['date'].max()) if not filtered_df.empty else None

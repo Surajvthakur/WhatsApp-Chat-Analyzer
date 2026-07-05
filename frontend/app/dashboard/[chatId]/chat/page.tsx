@@ -25,6 +25,70 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspaceStore } from "@/lib/workspace-store";
 
+function renderMarkdown(text: string) {
+  if (!text) return null;
+
+  const lines = text.split("\n");
+
+  return lines.map((line, lineIdx) => {
+    // Headers
+    if (line.startsWith("### ")) {
+      return (
+        <h3 key={lineIdx} className="text-base font-bold my-2 text-[var(--foreground)]">
+          {parseInline(line.slice(4))}
+        </h3>
+      );
+    }
+    if (line.startsWith("## ")) {
+      return (
+        <h2 key={lineIdx} className="text-lg font-bold my-3 text-[var(--foreground)]">
+          {parseInline(line.slice(3))}
+        </h2>
+      );
+    }
+    if (line.startsWith("# ")) {
+      return (
+        <h1 key={lineIdx} className="text-xl font-bold my-4 text-[var(--foreground)]">
+          {parseInline(line.slice(2))}
+        </h1>
+      );
+    }
+
+    // Bullet points: *, -, or bullet with leading whitespace
+    const trimmed = line.trim();
+    if (trimmed.startsWith("* ") || trimmed.startsWith("- ")) {
+      const cleanLine = trimmed.slice(2);
+      return (
+        <ul key={lineIdx} className="list-disc list-inside ml-4 my-1">
+          <li className="text-sm leading-relaxed">{parseInline(cleanLine)}</li>
+        </ul>
+      );
+    }
+
+    // Default paragraph
+    return (
+      <p key={lineIdx} className="text-sm leading-relaxed my-1.5 min-h-[1em]">
+        {parseInline(line)}
+      </p>
+    );
+  });
+}
+
+function parseInline(text: string) {
+  if (!text) return "";
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={idx} className="font-bold text-[var(--foreground)]">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+}
+
 export default function ChatPage() {
   const { chatId } = useWorkspaceStore();
   const { user, isLoading: authLoading } = useAuth();
@@ -491,9 +555,9 @@ export default function ChatPage() {
                       : "bg-[var(--muted)]/50 text-[var(--foreground)] rounded-tl-none border border-[var(--border)]/30"
                   }`}
                 >
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                    {msg.content}
-                  </p>
+                  <div className="text-sm leading-relaxed space-y-0.5">
+                    {renderMarkdown(msg.content)}
+                  </div>
                 </div>
 
                 {msg.role === "user" && (

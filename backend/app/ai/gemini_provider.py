@@ -53,9 +53,10 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                 await asyncio.sleep(4.0)
 
             batch = texts[start : start + _MAX_BATCH_SIZE]
+            contents = [types.Content(parts=[types.Part.from_text(text=txt)]) for txt in batch]
             response = await self._client.aio.models.embed_content(
                 model=self._model,
-                contents=batch,
+                contents=contents,
                 config=types.EmbedContentConfig(
                     output_dimensionality=self._dimension,
                 ),

@@ -54,9 +54,20 @@ async def ask_question(chat_id: str, request: QueryRequest):
     """
     Asks a question to the initialized AI session.
     """
+    from groq import RateLimitError as GroqRateLimitError, APIError as GroqAPIError
     try:
         answer = await query_chat(chat_id, request.question)
         return {"status": "success", "answer": answer}
+    except GroqRateLimitError as e:
+        raise HTTPException(
+            status_code=429,
+            detail="Groq LLM Rate Limit Exceeded. You have exceeded your Groq API quota. Please wait a minute and retry."
+        )
+    except GroqAPIError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Groq LLM Service Error: {str(e)}"
+        )
     except APIError as e:
         if getattr(e, "code", None) == 429 or getattr(e, "status", None) == "RESOURCE_EXHAUSTED" or "quota" in str(e).lower():
             raise HTTPException(
@@ -65,6 +76,12 @@ async def ask_question(chat_id: str, request: QueryRequest):
             )
         raise HTTPException(status_code=500, detail=f"AI Service Error: {e.message or str(e)}")
     except Exception as e:
+        err_str = str(e).lower()
+        if "rate limit" in err_str or "resource_exhausted" in err_str or "quota" in err_str or "429" in err_str:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate Limit Exceeded: {str(e)}"
+            )
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 

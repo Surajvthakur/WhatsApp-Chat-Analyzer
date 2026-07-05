@@ -10,6 +10,7 @@ from app.ai.qdrant_store import (
     save_embeddings,
     search_qdrant_embeddings,
     delete_workspace_embeddings,
+    get_qdrant_embeddings_count,
 )
 
 import pandas as pd
@@ -20,24 +21,37 @@ logger = logging.getLogger(__name__)
 async def ingest_chat(session_id: str, df: pd.DataFrame) -> bool:
     """
     Ensures embeddings exist in Qdrant for the given session.
-    If they already exist, returns immediately (cache hit).
+    If they already exist and the count matches the expected number of chunks,
+    returns immediately (cache hit).
     Otherwise chunks the chat, generates embeddings via the configured
     provider, and persists them to Qdrant.
     """
-    # Fast path: embeddings already stored in Qdrant
-    if has_embeddings(session_id):
-        logger.info(
-            "Embeddings already exist in Qdrant for '%s'. Skipping ingestion.",
-            session_id,
-        )
-        return True
-
-    logger.info("Ingesting chat for session '%s'...", session_id)
     chunks = chunk_chat_data(df)
     if not chunks:
         logger.warning("No chunks generated for session '%s'.", session_id)
         return False
 
+    expected_count = len(chunks)
+    actual_count = get_qdrant_embeddings_count(session_id)
+
+    if actual_count == expected_count:
+        logger.info(
+            "Embeddings already exist in Qdrant for '%s' and count matches (%d chunks). Skipping ingestion.",
+            session_id,
+            actual_count,
+        )
+        return True
+
+    if actual_count > 0:
+        logger.info(
+            "Embeddings count mismatch for '%s' (Qdrant: %d vs expected: %d). Deleting old embeddings and re-ingesting...",
+            session_id,
+            actual_count,
+            expected_count,
+        )
+        delete_workspace_embeddings(session_id)
+
+    logger.info("Ingesting chat for session '%s'...", session_id)
     metadata_list = get_chunks_metadata(df)
     embeddings = await generate_embeddings(chunks)
 
@@ -118,7 +132,7 @@ async def query_chat(session_id: str, question: str) -> str:
                     status = "Success" if r.success else "Failed"
                     tool_contexts.append(f"### Tool: {r.tool_name} (Status: {status})")
                     if r.success:
-                        tool_contexts.append(json.dumps(r.data, indent=2))
+                        tool_contexts.append(json.dumps(r.data, indent=2, ensure_ascii=False))
                     else:
                         tool_contexts.append(f"Error: {r.error}")
                         
@@ -174,6 +188,11 @@ TOOL EXECUTION RESULTS:
                 return completion.choices[0].message.content
                 
         except Exception as e:
+            from groq import RateLimitError, APIError as GroqAPIError
+            err_str = str(e).lower()
+            if isinstance(e, (RateLimitError, GroqAPIError)) or "rate limit" in err_str or "resource_exhausted" in err_str or "quota" in err_str or "429" in err_str:
+                logger.warning(f"Groq API/rate limit error in tool pipeline, raising directly to trigger user retry UI: {e}")
+                raise e
             logger.error(f"Error in tool routing/execution pipeline: {e}", exc_info=True)
             # Proceed to standard RAG pipeline fallback
 

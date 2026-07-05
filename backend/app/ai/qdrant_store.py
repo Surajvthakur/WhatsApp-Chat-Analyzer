@@ -92,6 +92,29 @@ def has_embeddings(session_id: str) -> bool:
         return False
 
 
+def get_qdrant_embeddings_count(session_id: str) -> int:
+    """
+    Returns the number of vector points associated with the given session_id in Qdrant.
+    """
+    try:
+        client = get_qdrant_client()
+        res = client.count(
+            collection_name=COLLECTION_NAME,
+            count_filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="workspace_id",
+                        match=MatchValue(value=session_id),
+                    )
+                ]
+            ),
+        )
+        return res.count
+    except Exception as e:
+        logger.error(f"Error counting embeddings in Qdrant for {session_id}: {e}")
+        return 0
+
+
 def search_qdrant_embeddings(
     workspace_id: str,
     query_embedding: list[float],
