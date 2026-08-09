@@ -26,7 +26,7 @@ async def ingest_chat(session_id: str, df: pd.DataFrame) -> bool:
     Otherwise chunks the chat, generates embeddings via the configured
     provider, and persists them to Qdrant.
     """
-    chunks = chunk_chat_data(df)
+    chunks = chunk_chat_data(df, chunk_size=settings.chunk_size)
     if not chunks:
         logger.warning("No chunks generated for session '%s'.", session_id)
         return False
@@ -52,7 +52,7 @@ async def ingest_chat(session_id: str, df: pd.DataFrame) -> bool:
         delete_workspace_embeddings(session_id)
 
     logger.info("Ingesting chat for session '%s'...", session_id)
-    metadata_list = get_chunks_metadata(df)
+    metadata_list = get_chunks_metadata(df, chunk_size=settings.chunk_size)
     embeddings = await generate_embeddings(chunks)
 
     success = save_embeddings(

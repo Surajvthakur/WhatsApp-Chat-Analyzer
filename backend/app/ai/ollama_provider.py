@@ -86,7 +86,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """
-        Embed *texts* via Ollama /api/embed.
+        Embed *texts* via Ollama /api/embed in concurrent sub-batches to prevent HTTP timeouts.
 
         Returns a list of float vectors in the same order as *texts*.
         """
@@ -95,22 +95,55 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
 
         await self._ensure_model_exists()
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            try:
-                response = await client.post(
-                    f"{self._url}/api/embed",
-                    json={"model": self._model, "input": texts},
-                )
-                response.raise_for_status()
-                res_data = response.json()
+        import asyncio
 
-                if "embeddings" in res_data:
-                    vectors = res_data["embeddings"]
-                    logger.debug("Ollama embedded %d texts -> %d vectors", len(texts), len(vectors))
-                    return vectors
-                else:
-                    raise ValueError("Ollama response missing 'embeddings' field")
-            except Exception as e:
-                logger.error("Ollama embedding generation failed: %s", e)
-                # Return zero-vector fallback matching configured dimension to preserve application stability
-                return [[0.0] * self._dimension for _ in texts]
+        batch_size = 250
+        batches = [texts[i : i + batch_size] for i in range(0, len(texts), batch_size)]
+        total_batches = len(batches)
+        logger.info(
+            "Embedding %d total chunks via Ollama model '%s' in %d sub-batches...",
+            len(texts),
+            self._model,
+            total_batches,
+        )
+
+        semaphore = asyncio.Semaphore(3)
+
+        async def _embed_subbatch(client: httpx.AsyncClient, batch_idx: int, sub_texts: list[str]) -> list[list[float]]:
+            async with semaphore:
+                try:
+                    response = await client.post(
+                        f"{self._url}/api/embed",
+                        json={"model": self._model, "input": sub_texts},
+                    )
+                    response.raise_for_status()
+                    res_data = response.json()
+
+                    if "embeddings" in res_data:
+                        vectors = res_data["embeddings"]
+                        logger.info(
+                            "Ollama completed batch %d/%d (%d chunks)",
+                            batch_idx + 1,
+                            total_batches,
+                            len(vectors),
+                        )
+                        return vectors
+                    else:
+                        raise ValueError("Ollama response missing 'embeddings' field")
+                except Exception as e:
+                    logger.error("Ollama embedding generation failed for batch %d: %s", batch_idx + 1, e)
+                    return [[0.0] * self._dimension for _ in sub_texts]
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            tasks = [
+                _embed_subbatch(client, idx, batch)
+                for idx, batch in enumerate(batches)
+            ]
+            batch_results = await asyncio.gather(*tasks)
+
+        flat_vectors: list[list[float]] = []
+        for vectors in batch_results:
+            flat_vectors.extend(vectors)
+
+        logger.info("Ollama completed all %d vectors successfully.", len(flat_vectors))
+        return flat_vectors

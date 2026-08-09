@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     gemini_embedding_model: str = "gemini-embedding-2"
     ollama_url: str = "http://localhost:11434"
     ollama_embedding_model: str = "all-minilm"
-    embedding_dimension: int = 768
+    embedding_dimension: int = 384
+    chunk_size: int = 15
 
     # Mail (SMTP) settings for OTP emails
     mail_username: str = ""
