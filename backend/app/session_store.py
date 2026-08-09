@@ -11,6 +11,7 @@ class ChatSession:
     df: pd.DataFrame
     created_at: float
     raw_text: str = ""
+    user_id: str | None = None
 
 
 class SessionStore:
@@ -18,7 +19,7 @@ class SessionStore:
         self._sessions: dict[str, ChatSession] = {}
         self._ttl_seconds = ttl_seconds
 
-    def create(self, df: pd.DataFrame, raw_text: str = "") -> str:
+    def create(self, df: pd.DataFrame, raw_text: str = "", user_id: str | None = None) -> str:
         self._cleanup_expired()
         chat_id = str(uuid.uuid4())
         self._sessions[chat_id] = ChatSession(
@@ -26,8 +27,22 @@ class SessionStore:
             df=df,
             created_at=time.time(),
             raw_text=raw_text,
+            user_id=user_id,
         )
         return chat_id
+
+    def create_with_id(
+        self, chat_id: str, df: pd.DataFrame, raw_text: str = "", user_id: str | None = None
+    ) -> None:
+        """Explicitly register a session with a designated chat/workspace ID."""
+        self._cleanup_expired()
+        self._sessions[chat_id] = ChatSession(
+            chat_id=chat_id,
+            df=df,
+            created_at=time.time(),
+            raw_text=raw_text,
+            user_id=user_id,
+        )
 
     def get(self, chat_id: str) -> pd.DataFrame | None:
         self._cleanup_expired()
@@ -39,6 +54,10 @@ class SessionStore:
     def get_session(self, chat_id: str) -> ChatSession | None:
         self._cleanup_expired()
         return self._sessions.get(chat_id)
+
+    def delete(self, chat_id: str) -> None:
+        """Remove a session by ID."""
+        self._sessions.pop(chat_id, None)
 
     def _cleanup_expired(self) -> None:
         now = time.time()

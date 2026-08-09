@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440  # 24 hours
 
+    # Rate limiting settings
+    rate_limit_register_max: int = 5
+    rate_limit_register_window_seconds: int = 900  # 15 minutes
+    rate_limit_verify_otp_max: int = 5
+    rate_limit_verify_otp_window_seconds: int = 300  # 5 minutes
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

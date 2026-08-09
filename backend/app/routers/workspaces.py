@@ -1,11 +1,12 @@
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 import pandas as pd
 
 import preprocessor
 from app.config import settings
 from app.routers.analysis import store
+from app.auth.authorization import get_current_user_id, verify_workspace_ownership, verify_chat_access
 from app.ai.qdrant_store import delete_workspace_embeddings
 
 logger = logging.getLogger(__name__)
@@ -20,13 +21,17 @@ class PersistRequest(BaseModel):
 
 
 @router.post("/persist")
-def persist_workspace(request: PersistRequest):
+def persist_workspace(req: Request, body: PersistRequest):
     """
     Persists parsed chat messages directly to PostgreSQL.
     Embeddings are generated lazily when the user opens the AI chat.
     """
-    chat_id = request.chat_id
-    workspace_id = request.workspace_id
+    user_id = get_current_user_id(req)
+    chat_id = body.chat_id
+    workspace_id = body.workspace_id
+
+    # 0. Verify authorization
+    verify_chat_access(chat_id, user_id)
 
     # 1. Fetch chat DataFrame from RAM SessionStore
     session_data = store.get_session(chat_id)
@@ -90,29 +95,26 @@ def persist_workspace(request: PersistRequest):
         logger.error(f"Database connection error during persist: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database connection error during persist: {str(e)}")
 
-    # 4. Cache the session in RAM under the workspace_id for instant retrieval in future requests
-    from app.session_store import ChatSession
-    import time
-    store._sessions[workspace_id] = ChatSession(
-        chat_id=workspace_id,
-        df=df,
-        created_at=time.time(),
-        raw_text=raw_text
-    )
+    # 3. Cache the session in RAM under the workspace_id for instant retrieval in future requests
+    store.create_with_id(workspace_id, df, raw_text=raw_text, user_id=user_id)
 
     return {
         "status": "success",
         "workspace_id": workspace_id,
-        "workspace_name": request.workspace_name,
+        "workspace_name": body.workspace_name,
     }
 
 
 @router.post("/{workspace_id}/load")
-def load_workspace(workspace_id: str):
+def load_workspace(workspace_id: str, req: Request):
     """
     Loads parsed chat messages directly from PostgreSQL, constructs the DataFrame,
     and populates it into FastAPI's RAM SessionStore under the workspace_id.
     """
+    user_id = get_current_user_id(req)
+    if not verify_workspace_ownership(workspace_id, user_id):
+        raise HTTPException(status_code=403, detail="Access forbidden: You do not own this workspace")
+
     if not settings.database_url:
         logger.error("Database URL is not configured.")
         raise HTTPException(
@@ -165,13 +167,8 @@ def load_workspace(workspace_id: str):
         h_next_str = h_next.astype(str).where(h != 23, '00')
         df['period'] = h_str + '-' + h_next_str
 
-        # Store in session store using workspace_id as the chat_id
-        store.create(df, raw_text="")
-
-        # Override the generated UUID to match workspace_id
-        last_key = list(store._sessions.keys())[-1]
-        store._sessions[workspace_id] = store._sessions.pop(last_key)
-        store._sessions[workspace_id].chat_id = workspace_id
+        # Store in session store using workspace_id as the chat_id and user_id ownership
+        store.create_with_id(workspace_id, df, raw_text="", user_id=user_id)
 
         # Build user list
         from app.serializers import build_user_list, get_date_range
@@ -191,22 +188,24 @@ def load_workspace(workspace_id: str):
 
 
 @router.delete("/{workspace_id}")
-def delete_workspace(workspace_id: str):
+def delete_workspace(workspace_id: str, req: Request):
     """
     Cleans up all resources associated with the workspace:
     Qdrant vectors and RAM sessions.
     """
+    user_id = get_current_user_id(req)
+    if not verify_workspace_ownership(workspace_id, user_id):
+        raise HTTPException(status_code=403, detail="Access forbidden: You do not own this workspace")
+
     # 1. Delete from Qdrant
     qdrant_deleted = delete_workspace_embeddings(workspace_id)
 
     # 2. Delete from memory session store
-    session_deleted = False
-    if workspace_id in store._sessions:
-        del store._sessions[workspace_id]
-        session_deleted = True
+    session_existed = store.get_session(workspace_id) is not None
+    store.delete(workspace_id)
 
     return {
         "status": "success",
         "qdrant_deleted": qdrant_deleted,
-        "ram_deleted": session_deleted,
+        "ram_deleted": session_existed,
     }

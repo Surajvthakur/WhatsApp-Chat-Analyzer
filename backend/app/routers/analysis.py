@@ -1,12 +1,13 @@
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, Request
 from fastapi.responses import Response
 
 import helper
 import preprocessor
 from app.config import settings
+from app.auth.authorization import get_current_user_id, verify_chat_access
 from app.schemas import (
     BusyUsersResponse,
     ChatUploadResponse,
@@ -43,7 +44,10 @@ store = SessionStore(ttl_seconds=settings.session_ttl_seconds)
 import logging
 logger = logging.getLogger(__name__)
 
-def _get_df(chat_id: str):
+def _get_df(chat_id: str, user_id: str | None = None):
+    if user_id is not None:
+        verify_chat_access(chat_id, user_id)
+
     df = store.get(chat_id)
     if df is None:
         if settings.database_url:
@@ -80,13 +84,8 @@ def _get_df(chat_id: str):
                             h_next_str = h_next.astype(str).where(h != 23, '00')
                             df['period'] = h_str + '-' + h_next_str
 
-                            # Populate into RAM store
-                            store.create(df, raw_text="")
-                            
-                            # Override the created random UUID to match workspace/chat_id
-                            last_key = list(store._sessions.keys())[-1]
-                            store._sessions[chat_id] = store._sessions.pop(last_key)
-                            store._sessions[chat_id].chat_id = chat_id
+                            # Populate into RAM store safely with designated workspace_id
+                            store.create_with_id(chat_id, df, raw_text="", user_id=user_id)
                             
                             logger.info(f"Successfully auto-hydrated session cache for {chat_id} with {len(df)} messages.")
                             return df
@@ -101,17 +100,27 @@ def _get_df(chat_id: str):
 
 
 @router.post("", response_model=ChatUploadResponse)
-async def upload_chat(file: UploadFile = File(...)):
+async def upload_chat(request: Request, file: UploadFile = File(...)):
+    user_id = get_current_user_id(request)
+
     if not file.filename or not file.filename.lower().endswith(".txt"):
         raise HTTPException(status_code=400, detail="Please upload a .txt WhatsApp export file")
 
-    raw = await file.read()
     max_bytes = settings.max_upload_mb * 1024 * 1024
-    if len(raw) > max_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size is {settings.max_upload_mb} MB",
-        )
+    chunks = []
+    total_bytes = 0
+    chunk_size = 1024 * 1024  # 1MB chunk size
+
+    while chunk := await file.read(chunk_size):
+        total_bytes += len(chunk)
+        if total_bytes > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {settings.max_upload_mb} MB",
+            )
+        chunks.append(chunk)
+
+    raw = b"".join(chunks)
 
     try:
         data = raw.decode("utf-8")
@@ -125,7 +134,7 @@ async def upload_chat(file: UploadFile = File(...)):
             detail="Could not parse chat. Ensure the file is a valid WhatsApp export.",
         )
 
-    chat_id = store.create(df, raw_text=data)
+    chat_id = store.create(df, raw_text=data, user_id=user_id)
     start, end = get_date_range(df)
 
     return ChatUploadResponse(
@@ -137,17 +146,20 @@ async def upload_chat(file: UploadFile = File(...)):
 
 
 @router.get("/{chat_id}/users", response_model=list[str])
-def get_users(chat_id: str):
-    df = _get_df(chat_id)
+def get_users(chat_id: str, request: Request):
+    user_id = get_current_user_id(request)
+    df = _get_df(chat_id, user_id=user_id)
     return build_user_list(df)
 
 
 @router.get("/{chat_id}/stats", response_model=StatsResponse)
 def get_stats(
     chat_id: str,
+    request: Request,
     user: str = Query(default="Overall"),
 ):
-    df = _get_df(chat_id)
+    user_id = get_current_user_id(request)
+    df = _get_df(chat_id, user_id=user_id)
     num_messages, words, num_media, num_links = helper.fetch_stats(user, df)
     return StatsResponse(
         messages=num_messages,
@@ -160,9 +172,11 @@ def get_stats(
 @router.get("/{chat_id}/timeline/monthly", response_model=list[TimelinePoint])
 def get_monthly_timeline(
     chat_id: str,
+    request: Request,
     user: str = Query(default="Overall"),
 ):
-    df = _get_df(chat_id)
+    user_id = get_current_user_id(request)
+    df = _get_df(chat_id, user_id=user_id)
     timeline = helper.monthly_timeline(user, df)
     return monthly_timeline_to_json(timeline)
 
@@ -170,9 +184,11 @@ def get_monthly_timeline(
 @router.get("/{chat_id}/timeline/daily", response_model=list[DailyTimelinePoint])
 def get_daily_timeline(
     chat_id: str,
+    request: Request,
     user: str = Query(default="Overall"),
 ):
-    df = _get_df(chat_id)
+    user_id = get_current_user_id(request)
+    df = _get_df(chat_id, user_id=user_id)
     timeline = helper.daily_timeline(user, df)
     return daily_timeline_to_json(timeline)
 
@@ -180,9 +196,11 @@ def get_daily_timeline(
 @router.get("/{chat_id}/activity/week", response_model=list[LabeledCount])
 def get_week_activity(
     chat_id: str,
+    request: Request,
     user: str = Query(default="Overall"),
 ):
-    df = _get_df(chat_id)
+    user_id = get_current_user_id(request)
+    df = _get_df(chat_id, user_id=user_id)
     activity = helper.week_activity_map(user, df)
     return series_to_labeled_counts(activity)
 
@@ -190,9 +208,11 @@ def get_week_activity(
 @router.get("/{chat_id}/activity/month", response_model=list[LabeledCount])
 def get_month_activity(
     chat_id: str,
+    request: Request,
     user: str = Query(default="Overall"),
 ):
-    df = _get_df(chat_id)
+    user_id = get_current_user_id(request)
+    df = _get_df(chat_id, user_id=user_id)
     activity = helper.month_activity_map(user, df)
     return series_to_labeled_counts(activity)
 
@@ -200,9 +220,11 @@ def get_month_activity(
 @router.get("/{chat_id}/activity/heatmap", response_model=HeatmapResponse)
 def get_activity_heatmap(
     chat_id: str,
+    request: Request,
     user: str = Query(default="Overall"),
 ):
-    df = _get_df(chat_id)
+    user_id = get_current_user_id(request)
+    df = _get_df(chat_id, user_id=user_id)
     heatmap = helper.activity_heatmap(user, df)
     return heatmap_to_json(heatmap)
 
@@ -210,6 +232,7 @@ def get_activity_heatmap(
 @router.get("/{chat_id}/users/busy", response_model=BusyUsersResponse)
 def get_busy_users(
     chat_id: str,
+    request: Request,
     user: str = Query(default="Overall"),
 ):
     if user != "Overall":
@@ -217,7 +240,8 @@ def get_busy_users(
             status_code=400,
             detail="Busy users analysis is only available for Overall",
         )
-    df = _get_df(chat_id)
+    user_id = get_current_user_id(request)
+    df = _get_df(chat_id, user_id=user_id)
     df_filtered = df[df["user"] != "group_notification"]
     x, percent_df = helper.most_busy_users(df_filtered)
     return busy_users_to_json(x, percent_df)
@@ -226,9 +250,11 @@ def get_busy_users(
 @router.get("/{chat_id}/words/common", response_model=list[WordCount])
 def get_common_words(
     chat_id: str,
+    request: Request,
     user: str = Query(default="Overall"),
 ):
-    df = _get_df(chat_id)
+    user_id = get_current_user_id(request)
+    df = _get_df(chat_id, user_id=user_id)
     words_df = helper.most_common_words(user, df)
     return common_words_to_json(words_df)
 
@@ -236,9 +262,11 @@ def get_common_words(
 @router.get("/{chat_id}/words/cloud")
 def get_wordcloud(
     chat_id: str,
+    request: Request,
     user: str = Query(default="Overall"),
 ):
-    df = _get_df(chat_id)
+    user_id = get_current_user_id(request)
+    df = _get_df(chat_id, user_id=user_id)
     wc = helper.create_wordcloud(user, df)
     png_bytes = wordcloud_to_png(wc)
     return Response(content=png_bytes, media_type="image/png")
@@ -247,8 +275,10 @@ def get_wordcloud(
 @router.get("/{chat_id}/emoji", response_model=list[EmojiCount])
 def get_emoji(
     chat_id: str,
+    request: Request,
     user: str = Query(default="Overall"),
 ):
-    df = _get_df(chat_id)
+    user_id = get_current_user_id(request)
+    df = _get_df(chat_id, user_id=user_id)
     emoji_df = helper.emoji_helper(user, df)
     return emoji_to_json(emoji_df)

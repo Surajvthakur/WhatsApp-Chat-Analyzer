@@ -15,6 +15,7 @@ import psycopg2.extras
 from app.config import settings
 from app.auth.otp_service import generate_otp, save_otp, verify_otp
 from app.auth.email_config import send_otp_email
+from app.auth.rate_limiter import rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +119,19 @@ async def register(body: RegisterRequest, bg: BackgroundTasks):
     Creates the user profile, generates a 6-digit OTP, and dispatches
     the verification email as a background task.
     """
+    email_key = f"register:{body.email.lower().strip()}"
+    allowed, retry_after = await rate_limiter.check_rate_limit(
+        email_key,
+        settings.rate_limit_register_max,
+        settings.rate_limit_register_window_seconds,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many OTP requests for this email. Please try again in {retry_after} seconds.",
+        )
+
     user = await asyncio.to_thread(_create_user_if_not_exists, body.email)
-
-
 
     code = generate_otp()
     await save_otp(body.email, code)
@@ -136,9 +147,24 @@ async def verify_otp_endpoint(body: VerifyOtpRequest):
     Verify the 6-digit OTP. On success, activates the user and returns
     a signed JWT access token.
     """
+    email_key = f"verify:{body.email.lower().strip()}"
+    allowed, retry_after = await rate_limiter.check_rate_limit(
+        email_key,
+        settings.rate_limit_verify_otp_max,
+        settings.rate_limit_verify_otp_window_seconds,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many verification attempts. Please try again in {retry_after} seconds.",
+        )
+
     is_valid = await verify_otp(body.email, body.code)
     if not is_valid:
         raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+
+    # Reset rate limit counter on successful verification
+    await rate_limiter.clear(email_key)
 
     user = await asyncio.to_thread(_activate_user, body.email)
     token = _create_jwt(user["id"], user["email"])
