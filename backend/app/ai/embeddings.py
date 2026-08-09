@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 _PROVIDERS = {
     "gemini": "app.ai.gemini_provider.GeminiEmbeddingProvider",
+    "ollama": "app.ai.ollama_provider.OllamaEmbeddingProvider",
 }
 
 
