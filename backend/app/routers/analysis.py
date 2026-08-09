@@ -32,13 +32,12 @@ from app.serializers import (
     series_to_labeled_counts,
     wordcloud_to_png,
 )
-from app.session_store import SessionStore
+from app.session_store import SessionStore, store
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 os.chdir(BACKEND_ROOT)
 
 router = APIRouter(prefix="/api/v1/chats", tags=["analysis"])
-store = SessionStore(ttl_seconds=settings.session_ttl_seconds)
 
 
 import logging

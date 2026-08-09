@@ -68,3 +68,8 @@ class SessionStore:
         ]
         for cid in expired:
             del self._sessions[cid]
+
+
+from app.config import settings
+
+store = SessionStore(ttl_seconds=settings.session_ttl_seconds)
