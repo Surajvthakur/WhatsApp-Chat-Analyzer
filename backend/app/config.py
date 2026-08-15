@@ -25,11 +25,11 @@ class Settings(BaseSettings):
     mail_username: str = ""
     mail_password: str = ""
     mail_from: str = ""
-    mail_port: int = 587
+    mail_port: int = 465
     mail_server: str = "smtp.gmail.com"
     mail_from_name: str = "WhatsApp Chat Analyzer"
-    mail_starttls: bool = True
-    mail_ssl_tls: bool = False
+    mail_starttls: bool = False
+    mail_ssl_tls: bool = True
 
     # JWT settings
     jwt_algorithm: str = "HS256"
