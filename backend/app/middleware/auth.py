@@ -44,6 +44,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             token = request.query_params.get("token")
 
         if not token:
+            if path.startswith("/api/v1/chats"):
+                request.state.user = None
+                return await call_next(request)
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Missing Authorization header or token query parameter"}
