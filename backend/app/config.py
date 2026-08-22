@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     embedding_dimension: int = 384
     chunk_size: int = 15
 
-    # Mail (SMTP) settings for OTP emails
+    # Mail settings for OTP emails
+    resend_api_key: str = ""
     mail_username: str = ""
     mail_password: str = ""
     mail_from: str = ""
