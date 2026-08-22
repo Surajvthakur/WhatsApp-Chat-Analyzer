@@ -58,7 +58,7 @@ async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ pa
     const data = await res.arrayBuffer();
     const resHeaders = new Headers();
     
-    const headersToReturn = ["content-type", "content-length", "cache-control"];
+    const headersToReturn = ["content-type", "cache-control"];
     for (const h of headersToReturn) {
       const val = res.headers.get(h);
       if (val) {

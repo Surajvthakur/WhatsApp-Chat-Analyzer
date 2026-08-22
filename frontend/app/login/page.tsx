@@ -49,16 +49,25 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
 
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
       const res = await fetch(`/api/v1/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: cleanEmail }),
       });
 
+      const text = await res.text();
+      let body: any = {};
+      try {
+        body = text ? JSON.parse(text) : {};
+      } catch {
+        body = { detail: text || "Registration failed" };
+      }
+
       if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.detail || "Registration failed");
+        throw new Error(body.detail || body.error || "Registration failed");
       }
 
       setStep("otp");
@@ -81,19 +90,27 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
 
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
       const res = await fetch(`/api/v1/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code: otpCode }),
+        body: JSON.stringify({ email: cleanEmail, code: otpCode }),
       });
 
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.detail || "Verification failed");
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { detail: text || "Verification failed" };
       }
 
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || data.error || "Verification failed");
+      }
+
       login(data.access_token);
       
       // Delay slightly for verification animation feedback

@@ -119,7 +119,8 @@ async def register(body: RegisterRequest, bg: BackgroundTasks):
     Creates the user profile, generates a 6-digit OTP, and dispatches
     the verification email as a background task.
     """
-    email_key = f"register:{body.email.lower().strip()}"
+    clean_email = body.email.lower().strip()
+    email_key = f"register:{clean_email}"
     allowed, retry_after = await rate_limiter.check_rate_limit(
         email_key,
         settings.rate_limit_register_max,
@@ -131,14 +132,14 @@ async def register(body: RegisterRequest, bg: BackgroundTasks):
             detail=f"Too many OTP requests for this email. Please try again in {retry_after} seconds.",
         )
 
-    user = await asyncio.to_thread(_create_user_if_not_exists, body.email)
+    user = await asyncio.to_thread(_create_user_if_not_exists, clean_email)
 
     code = generate_otp()
-    await save_otp(body.email, code)
+    await save_otp(clean_email, code)
 
-    bg.add_task(send_otp_email, body.email, code)
+    bg.add_task(send_otp_email, clean_email, code)
 
-    return {"message": "Verification code sent", "email": body.email}
+    return {"message": "Verification code sent", "email": clean_email}
 
 
 @router.post("/verify-otp", response_model=TokenResponse)
@@ -147,7 +148,9 @@ async def verify_otp_endpoint(body: VerifyOtpRequest):
     Verify the 6-digit OTP. On success, activates the user and returns
     a signed JWT access token.
     """
-    email_key = f"verify:{body.email.lower().strip()}"
+    clean_email = body.email.lower().strip()
+    clean_code = body.code.strip()
+    email_key = f"verify:{clean_email}"
     allowed, retry_after = await rate_limiter.check_rate_limit(
         email_key,
         settings.rate_limit_verify_otp_max,
@@ -159,14 +162,14 @@ async def verify_otp_endpoint(body: VerifyOtpRequest):
             detail=f"Too many verification attempts. Please try again in {retry_after} seconds.",
         )
 
-    is_valid = await verify_otp(body.email, body.code)
+    is_valid = await verify_otp(clean_email, clean_code)
     if not is_valid:
         raise HTTPException(status_code=400, detail="Invalid or expired OTP")
 
     # Reset rate limit counter on successful verification
     await rate_limiter.clear(email_key)
 
-    user = await asyncio.to_thread(_activate_user, body.email)
+    user = await asyncio.to_thread(_activate_user, clean_email)
     token = _create_jwt(user["id"], user["email"])
 
     return TokenResponse(access_token=token)
