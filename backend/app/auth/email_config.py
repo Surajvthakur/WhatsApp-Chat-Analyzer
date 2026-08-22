@@ -5,16 +5,19 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+clean_username = settings.mail_username.strip('"\' ')
+clean_password = settings.mail_password.strip('"\' ').replace(" ", "")
+
 mail_config = ConnectionConfig(
-    MAIL_USERNAME=settings.mail_username,
-    MAIL_PASSWORD=settings.mail_password,
-    MAIL_FROM=settings.mail_from or settings.mail_username or "noreply@whatsapp-analyzer.com",
+    MAIL_USERNAME=clean_username,
+    MAIL_PASSWORD=clean_password,
+    MAIL_FROM=settings.mail_from.strip('"\' ') or clean_username or "noreply@whatsapp-analyzer.com",
     MAIL_PORT=settings.mail_port,
     MAIL_SERVER=settings.mail_server,
     MAIL_FROM_NAME=settings.mail_from_name,
     MAIL_STARTTLS=settings.mail_starttls,
     MAIL_SSL_TLS=settings.mail_ssl_tls,
-    USE_CREDENTIALS=True if (settings.mail_username and settings.mail_password) else False,
+    USE_CREDENTIALS=True if (clean_username and clean_password) else False,
     VALIDATE_CERTS=True,
 )
 
