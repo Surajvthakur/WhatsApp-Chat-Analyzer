@@ -1,4 +1,5 @@
 import logging
+import httpx
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 
 from app.config import settings
@@ -27,11 +28,42 @@ fast_mail = FastMail(mail_config)
 async def send_otp_email(email: str, code: str) -> None:
     """Send a styled HTML email containing the 6-digit OTP."""
     logger.info(f"=== OTP VERIFICATION CODE FOR {email}: [{code}] ===")
-    
-    if not settings.mail_username or not settings.mail_password:
+
+    # 1. First try relaying through Vercel API over HTTPS (Port 443 — NEVER blocked by Render)
+    frontend_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    vercel_base = next((o for o in frontend_origins if "vercel.app" in o or "http" in o), None)
+
+    if vercel_base:
+        if not vercel_base.startswith("http"):
+            vercel_base = f"https://{vercel_base}"
+        
+        vercel_endpoint = f"{vercel_base.rstrip('/')}/api/send-otp"
+        logger.info(f"Attempting to relay OTP email via Vercel endpoint: {vercel_endpoint}")
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.post(
+                    vercel_endpoint,
+                    json={
+                        "email": email,
+                        "code": code,
+                        "secret": settings.auth_secret,
+                    },
+                )
+                if res.status_code == 200:
+                    logger.info(f"Successfully delivered OTP email to {email} via Vercel email relay!")
+                    return
+                else:
+                    logger.warning(
+                        f"Vercel email relay returned status {res.status_code}: {res.text}. Falling back to direct SMTP..."
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to relay email via Vercel ({e}). Falling back to direct SMTP...")
+
+    # 2. Fallback to direct SMTP if credentials provided
+    if not clean_username or not clean_password:
         logger.warning(
-            f"SMTP credentials not configured (MAIL_USERNAME / MAIL_PASSWORD missing). "
-            f"Skipping email delivery. Use OTP code [{code}] from logs to verify."
+            f"SMTP credentials not configured. Skipping email delivery. Use OTP code [{code}] from logs to verify."
         )
         return
 
@@ -65,7 +97,8 @@ async def send_otp_email(email: str, code: str) -> None:
         )
 
         await fast_mail.send_message(message)
-        logger.info(f"Successfully delivered OTP email to {email}")
+        logger.info(f"Successfully delivered OTP email to {email} via direct SMTP")
     except Exception as e:
-        logger.error(f"Failed to send OTP email to {email}: {e}. You can use OTP code [{code}] from logs.")
+        logger.error(f"Failed to send OTP email to {email} via direct SMTP: {e}. You can use OTP code [{code}] from logs.")
+
 
