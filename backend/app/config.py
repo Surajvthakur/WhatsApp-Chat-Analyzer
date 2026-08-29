@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = 3600
     max_upload_mb: int = 50
     groq_api_key: str = ""
-    groq_model: str = "llama-3.1-8b-instant"
+    groq_model: str = "llama-3.3-70b-versatile"
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str = ""
     auth_secret: str = ""
