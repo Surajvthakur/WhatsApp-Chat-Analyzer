@@ -1,6 +1,6 @@
 import logging
 
-from groq import Groq
+from app.ai.groq_helper import call_groq_chat_completion
 
 from app.config import settings
 from app.ai.chunking import chunk_chat_data, get_chunks_metadata
@@ -142,45 +142,10 @@ async def query_chat(session_id: str, question: str) -> str:
                 if not settings.groq_api_key:
                     return "GROQ API Key is not configured on the server."
                     
+                from groq import Groq
                 client = Groq(api_key=settings.groq_api_key)
-                
-                # Retrieve chat history
-                chat_history = get_recent_chat_history(session_id, limit=10)
-                if chat_history and chat_history[-1]["role"] == "user" and chat_history[-1]["content"] == question:
-                    chat_history.pop()
-                chat_history = chat_history[-10:]
-                
-                history_context = ""
-                if chat_history:
-                    history_lines = []
-                    for msg in chat_history:
-                        role_label = "User" if msg["role"] == "user" else "Assistant"
-                        history_lines.append(f"{role_label}: {msg['content']}")
-                    history_context = "\n".join(history_lines)
-                    
-                prompt = f"""You are a helpful AI assistant analyzing a WhatsApp chat export.
-You have been provided with structured query results extracted from the chat dataset by running dedicated analysis tools.
-Answer the user's question accurately using ONLY the provided tool results. Format numbers, percentages, dates, and lists cleanly.
-
-TOOL EXECUTION RESULTS:
-{context_str}
-"""
-                if history_context:
-                    prompt += f"\nRECENT CHAT HISTORY:\n{history_context}\n"
-                prompt += f"\nQUESTION:\n{question}\n"
-                
-                messages = [
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant analyzing WhatsApp chat logs.",
-                    }
-                ]
-                for msg in chat_history:
-                    messages.append({"role": msg["role"], "content": msg["content"]})
-                messages.append({"role": "user", "content": prompt})
-                
-                completion = client.chat.completions.create(
-                    model=settings.groq_model,
+                completion = call_groq_chat_completion(
+                    client,
                     messages=messages,
                     temperature=0.2,
                     max_tokens=1024,
@@ -215,62 +180,10 @@ TOOL EXECUTION RESULTS:
         return "GROQ API Key is not configured on the server."
 
     try:
+        from groq import Groq
         client = Groq(api_key=settings.groq_api_key)
-
-        # Retrieve chat history
-        chat_history = get_recent_chat_history(session_id, limit=10)
-
-        # Exclude current question if it was already saved asynchronously by frontend
-        if chat_history and chat_history[-1]["role"] == "user" and chat_history[-1]["content"] == question:
-            chat_history.pop()
-
-        chat_history = chat_history[-10:]  # Ensure we have at most 10 messages (5 turns)
-
-        history_context = ""
-        if chat_history:
-            history_lines = []
-            for msg in chat_history:
-                role_label = "User" if msg["role"] == "user" else "Assistant"
-                history_lines.append(f"{role_label}: {msg['content']}")
-            history_context = "\n".join(history_lines)
-
-        prompt = f"""You are a helpful AI assistant analyzing a WhatsApp chat export.
-Answer the user's question based ONLY on the provided chat context. If the answer is not in the context, say so. Do not invent information.
-
-CONTEXT:
-{context}
-"""
-
-        if history_context:
-            prompt += f"\nRECENT CHAT HISTORY:\n{history_context}\n"
-
-        prompt += f"""
-QUESTION:
-{question}
-"""
-
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a helpful assistant analyzing WhatsApp chat logs.",
-            }
-        ]
-
-        # Inject structural chat history
-        for msg in chat_history:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
-
-        # Inject the current query prompt
-        messages.append({
-            "role": "user",
-            "content": prompt
-        })
-
-        completion = client.chat.completions.create(
-            model=settings.groq_model,
+        completion = call_groq_chat_completion(
+            client,
             messages=messages,
             temperature=0.2,
             max_tokens=1024,

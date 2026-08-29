@@ -106,8 +106,9 @@ class SummaryTool(BaseTool):
 
         try:
             logger.info(f"Summarizing {len(analysis_df)} messages using Groq LLM...")
-            completion = self.groq_client.chat.completions.create(
-                model=settings.groq_model,
+            from app.ai.groq_helper import call_groq_chat_completion
+            completion = call_groq_chat_completion(
+                self.groq_client,
                 messages=messages,
                 temperature=0.3,
                 max_tokens=350
